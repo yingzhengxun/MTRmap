@@ -1,0 +1,105 @@
+// Stonecutter 分支脚本：NeoForge 版本节点（1.21.1）。
+// 1.21.1 没有 legacy Forge 版 MTR，Forge 侧只能用 NeoForge。
+plugins {
+    id "dev.architectury.loom"
+    id "architectury-plugin"
+    id "com.github.johnrengelman.shadow"
+}
+
+def sc = stonecutter
+def mc = sc.current.version
+def loader = findProperty("loom.platform")
+def modVersion = rootProject.property("mod.version")
+def commonProject = sc.node.sibling("").project
+// MC 1.20.5 起要求 Java 21
+def javaVersion = (mc.split("\\.")[1] as int) >= 21 ? JavaVersion.VERSION_21 : JavaVersion.VERSION_17
+
+version = modVersion
+base {
+    archivesName = "${rootProject.property("mod.id")}-${loader}"
+}
+
+architectury {
+    platformSetupLoomIde()
+    neoForge()
+}
+
+configurations {
+    common
+    shadowCommon
+    compileClasspath.extendsFrom common
+    runtimeClasspath.extendsFrom common
+    developmentNeoForge.extendsFrom common
+}
+
+repositories {
+    mavenCentral()
+    maven { url = "https://maven.neoforged.net/releases/" }
+    maven { url = "https://maven.architectury.dev/" }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${mc}"
+    mappings loom.officialMojangMappings()
+
+    neoForge "net.neoforged:neoforge:${commonProject.property("deps.neoforge_loader")}"
+
+    // MTR 4.x 的 NeoForge 产物
+    modImplementation rootProject.files("libs/${commonProject.property("deps.mtr_neoforge_jar")}")
+
+    // Xaero 世界地图（NeoForge 产物）软联动，只编译期依赖
+    compileOnly rootProject.files("libs/${commonProject.property("deps.xaero_neoforge_jar")}")
+
+    common(project(path: commonProject.path, configuration: "namedElements")) { transitive false }
+    shadowCommon(project(path: commonProject.path, configuration: "transformProductionNeoForge")) { transitive false }
+}
+
+processResources {
+    def props = [
+            version  : modVersion,
+            id       : rootProject.property("mod.id"),
+            name     : rootProject.property("mod.name"),
+            minecraft: commonProject.property("mod.mc_dep_forgelike"),
+            mtr      : commonProject.property("mod.mtr_dep"),
+            neoforge : commonProject.property("deps.neoforge_loader")
+    ]
+    inputs.properties props
+    filesMatching("META-INF/neoforge.mods.toml") {
+        expand props
+    }
+}
+
+java {
+    sourceCompatibility = javaVersion
+    targetCompatibility = javaVersion
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
+    options.release = javaVersion == JavaVersion.VERSION_21 ? 21 : 17
+}
+
+shadowJar {
+    exclude "fabric.mod.json"
+    exclude "architectury.common.json"
+
+    configurations = [project.configurations.shadowCommon]
+    archiveClassifier = "dev-shadow"
+}
+
+remapJar {
+    input.set shadowJar.archiveFile
+    dependsOn shadowJar
+}
+
+tasks.build {
+    group = "versioned"
+    description = "Must run through 'chiseledBuild'"
+}
+
+tasks.register("buildAndCollect", Copy) {
+    group = "versioned"
+    dependsOn tasks.named("build")
+    from(tasks.named("remapJar"))
+    into(rootProject.layout.buildDirectory.dir("libs/${modVersion}/${mc}/${loader}"))
+}

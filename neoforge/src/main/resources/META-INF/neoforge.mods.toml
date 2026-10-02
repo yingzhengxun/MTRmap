@@ -1,0 +1,41 @@
+modLoader = "javafml"
+# NeoForge 1.21.1 的 loaderVersion 是 FML（语言加载器 javafml）的版本范围，不是 NeoForge 自身版本，
+# 以 NeoForge 官方 1.21.1 MDK 的写法为准（loader_version_range=[1,)）。
+loaderVersion = "[1,)"
+license = "Apache-2.0"
+
+[[mods]]
+modId = "${id}"
+version = "${version}"
+displayName = "${name}"
+authors = "MTR Map Team"
+description = '''
+通过 localhost:1145 显示 Minecraft Transit Railway 的线路地图，包含车站、线路、车厂与玩家位置。
+'''
+
+[[mixins]]
+config = "mtrmap.mixins.json"
+
+[[mixins]]
+config = "mtrmap.xaero.mixins.json"
+
+[[dependencies.${id}]]
+modId = "mtr"
+type = "required"
+versionRange = "${mtr}"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.${id}]]
+modId = "neoforge"
+type = "required"
+versionRange = "[${neoforge},)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.${id}]]
+modId = "minecraft"
+type = "required"
+versionRange = "${minecraft}"
+ordering = "NONE"
+side = "BOTH"

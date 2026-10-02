@@ -1,0 +1,32 @@
+# Gradle / Loom / Stonecutter 构建产物
+.gradle/
+build/
+**/build/
+**/.gradle/
+.run/
+run/
+
+# 平台模块下由 Stonecutter 生成的各版本工作目录（保留 versions/<mc>/gradle.properties 这类手写配置）
+fabric/versions/
+forge/versions/
+neoforge/versions/
+
+# 日志
+*.log
+
+# 根目录下由 shadowJar 实验遗留的 MANIFEST（fabric/forge/neoforge 里的 META-INF 需要保留）
+/META-INF/
+
+# 本地第三方依赖 jar（MTR / Xaero，受各自许可证约束，不随源码发布）
+libs/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# 系统文件
+.DS_Store
+Thumbs.db

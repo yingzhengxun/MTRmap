@@ -1,0 +1,134 @@
+// Stonecutter 分支脚本：每个 fabric 版本节点执行一次。
+plugins {
+    id "dev.architectury.loom"
+    id "architectury-plugin"
+    id "com.github.johnrengelman.shadow"
+}
+
+def sc = stonecutter
+def mc = sc.current.version
+def loader = findProperty("loom.platform")
+def modVersion = rootProject.property("mod.version")
+// 同版本的 common 节点（root 分支上版本号相同的那个节点）
+def commonProject = sc.node.sibling("").project
+// MC 1.20.5 起要求 Java 21，1.17~1.20.4 用 17，1.16.5 及更早用 8
+def mcMinor = mc.split("\\.")[1] as int
+def javaVersion = mcMinor >= 21 ? JavaVersion.VERSION_21
+        : (mcMinor >= 17 ? JavaVersion.VERSION_17 : JavaVersion.VERSION_1_8)
+def javaRelease = mcMinor >= 21 ? 21 : (mcMinor >= 17 ? 17 : 8)
+// 写进 fabric.mod.json 的 Java 下限：1.16.5 的字节码是 Java 8，跑在 Java 8 上也应当能加载
+def javaCompat = javaRelease
+
+version = modVersion
+base {
+    archivesName = "${rootProject.property("mod.id")}-${loader}"
+}
+
+architectury {
+    platformSetupLoomIde()
+    fabric()
+}
+
+// 见根 build.gradle：固定 refmap 文件名，供 mtrmap.xaero.mixins.json 引用
+loom {
+    mixin {
+        defaultRefmapName = "mtrmap-fabric-refmap.json"
+    }
+}
+
+configurations {
+    common
+    shadowCommon // 不要用 shadow 插件自带的 configuration，它会 *排除* 文件
+    compileClasspath.extendsFrom common
+    runtimeClasspath.extendsFrom common
+    developmentFabric.extendsFrom common
+}
+
+repositories {
+    mavenCentral()
+    maven { url = "https://maven.fabricmc.net/" }
+    maven { url = "https://maven.architectury.dev/" }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${mc}"
+    mappings loom.officialMojangMappings()
+
+    modImplementation "net.fabricmc:fabric-loader:${property("deps.fabric_loader")}"
+    modApi "net.fabricmc.fabric-api:fabric-api:${commonProject.property("deps.fabric_api")}"
+
+    // 与 common 使用同一份 MTR 分支产物
+    modImplementation rootProject.files("libs/${commonProject.property("deps.mtr_fabric_jar")}")
+
+    // Xaero 世界地图是软联动（可选依赖）：只编译期依赖，是否生效由 XaeroMixinPlugin 决定。
+    // Xaero 自身的类名不做混淆，所以直接用普通 jar。
+    compileOnly rootProject.files("libs/${commonProject.property("deps.xaero_fabric_jar")}")
+
+    common(project(path: commonProject.path, configuration: "namedElements")) { transitive false }
+    shadowCommon(project(path: commonProject.path, configuration: "transformProductionFabric")) { transitive false }
+}
+
+processResources {
+    def props = [
+            version     : modVersion,
+            id          : rootProject.property("mod.id"),
+            name        : rootProject.property("mod.name"),
+            minecraft   : commonProject.property("mod.mc_dep_fabric"),
+            mtr         : commonProject.property("mod.mtr_dep"),
+            java_compat : javaCompat
+    ]
+    inputs.properties props
+    filesMatching("fabric.mod.json") {
+        expand props
+    }
+    // Mixin 0.8.4（Forge 1.16.5 自带）还没有 JAVA_17 这个 CompatibilityLevel，
+    // 1.16.5 因此降到 JAVA_8，与根脚本里的 mtrmap.mixins.json 保持一致
+    def mixinCompat = mcMinor >= 17 ? "JAVA_17" : "JAVA_8"
+    inputs.property "compatibilityLevel", mixinCompat
+    filesMatching("mtrmap.xaero.mixins.json") {
+        expand "compatibilityLevel": mixinCompat
+    }
+}
+
+java {
+    sourceCompatibility = javaVersion
+    targetCompatibility = javaVersion
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
+    options.release = javaRelease
+}
+
+shadowJar {
+    exclude "architectury.common.json"
+
+    // common 的 refmap 名字带 MC 版本号（mtrmap-common-1.20.1-refmap.json），
+    // 而 mtrmap.mixins.json 里的 "refmap" 只能写死一个固定名字，否则 Fabric 下注入静默失败。
+    // common 的产物是通过 configurations 合并进来的，这类条目不走 rename/eachFile，
+    // 所以这里用 zipTree 手工再放一份改好名的。
+    from(project.provider { zipTree(project.configurations.shadowCommon.singleFile) }) {
+        include "mtrmap-common-*-refmap.json"
+        rename "mtrmap-common-.*-refmap\\.json", "mtrmap-common-refmap.json"
+    }
+
+    configurations = [project.configurations.shadowCommon]
+    archiveClassifier = "dev-shadow"
+}
+
+remapJar {
+    input.set shadowJar.archiveFile
+    dependsOn shadowJar
+}
+
+tasks.build {
+    group = "versioned"
+    description = "Must run through 'chiseledBuild'"
+}
+
+tasks.register("buildAndCollect", Copy) {
+    group = "versioned"
+    dependsOn tasks.named("build")
+    from(tasks.named("remapJar"))
+    into(rootProject.layout.buildDirectory.dir("libs/${modVersion}/${mc}/${loader}"))
+}

@@ -1,0 +1,16 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.mtrmap.mixin",
+  "compatibilityLevel": "${compatibilityLevel}",
+  "refmap": "mtrmap-common-refmap.json",
+  "client": [
+    "DashboardScreenMixin",
+    "hud.GuiHudMixin"
+  ],
+  "mixins": [
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

@@ -1,0 +1,42 @@
+modLoader = "javafml"
+# 这里必须填 FML 语言提供者 javafml 的版本，只有主版本号（1.20.1 是 47、1.19.2 是 43），
+# 不能填完整的 Forge 版本号（如 47.4.23），否则启动时报 "needs language provider javafml:47.4.23 or above"。
+loaderVersion = "[${fml},)"
+license = "Apache-2.0"
+
+[[mods]]
+modId = "${id}"
+version = "${version}"
+displayName = "${name}"
+authors = "MTR Map Team"
+description = '''
+通过 localhost:1145 显示 Minecraft Transit Railway 的线路地图，包含车站、线路、车厂与玩家位置。
+'''
+
+[[mixins]]
+config = "mtrmap.mixins.json"
+
+[[mixins]]
+config = "mtrmap.xaero.mixins.json"
+
+[[dependencies.${id}]]
+modId = "mtr"
+mandatory = true
+versionRange = "${mtr}"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.${id}]]
+modId = "forge"
+mandatory = true
+# 同 loaderVersion：按官方 MDK 只用主版本号，避免把 Forge 钉在某个具体小版本上
+versionRange = "[${fml},)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.${id}]]
+modId = "minecraft"
+mandatory = true
+versionRange = "${minecraft}"
+ordering = "NONE"
+side = "BOTH"

@@ -1,0 +1,1095 @@
+* {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+:root {
+	--bg-color: #1a1a2e;
+	--text-color: #e0e0e0;
+	--panel-bg: rgba(20, 20, 40, 0.85);
+	--grid-color: rgba(60, 60, 100, 0.2);
+	--border-color: rgba(100, 130, 255, 0.3);
+	--tooltip-bg: rgba(18, 18, 38, 0.95);
+	--tooltip-border: rgba(100, 130, 255, 0.4);
+	--button-bg: rgba(30, 30, 60, 0.9);
+	--button-hover: rgba(60, 60, 120, 0.9);
+	--button-color: #e0e0e0;
+	--status-color: #7ec8e3;
+	--label-color: #8a8aa8;
+	--tt-title-color: #ffffff;
+	--legend-item-color: #e0e0e0;
+	--route-active-bg: rgba(90, 150, 255, 0.35);
+	--route-active-border: #7ec8e3;
+	--route-active-color: #ffffff;
+	--route-primary-bg: rgba(70, 120, 240, 0.85);
+	--route-primary-hover: rgba(90, 145, 255, 0.95);
+	--route-primary-color: #ffffff;
+	--route-primary-border: rgba(120, 160, 255, 0.6);
+	--route-card-bg: rgba(255, 255, 255, 0.06);
+	--route-hint-bg: rgba(126, 200, 227, 0.12);
+	--route-hint-border: #7ec8e3;
+	--route-hint-color: #a8dcf0;
+	--route-tab-active-bg: rgba(90, 150, 255, 0.3);
+	--route-tab-active-border: #7ec8e3;
+	--route-tab-active-color: #ffffff;
+	--route-node-bg: #ffffff;
+	--route-realtime-color: #7ee787;
+	--route-transfer-bg: rgba(255, 200, 0, 0.15);
+	--route-transfer-color: #ffd479;
+	--route-warn-color: #ff8080;
+	--route-start-color: #2ecc71;
+	--route-end-color: #ff5555;
+	--route-walk-color: #9aa0a6;
+}
+
+body.light-mode {
+	--bg-color: #e8e8f0;
+	--text-color: #333344;
+	--panel-bg: rgba(255, 255, 255, 0.92);
+	--grid-color: rgba(0, 0, 0, 0.08);
+	--border-color: rgba(80, 110, 200, 0.3);
+	--tooltip-bg: rgba(255, 255, 255, 0.95);
+	--tooltip-border: rgba(80, 110, 200, 0.4);
+	--button-bg: rgba(255, 255, 255, 0.9);
+	--button-hover: rgba(235, 235, 245, 0.9);
+	--button-color: #333344;
+	--status-color: #2a6a8a;
+	--label-color: #666680;
+	--tt-title-color: #222233;
+	--legend-item-color: #333344;
+	--route-active-bg: rgba(70, 120, 240, 0.2);
+	--route-active-border: #3a6fd8;
+	--route-active-color: #1a3a8a;
+	--route-primary-bg: #3a6fd8;
+	--route-primary-hover: #2f5fc0;
+	--route-primary-color: #ffffff;
+	--route-primary-border: rgba(60, 110, 210, 0.6);
+	--route-card-bg: rgba(0, 0, 0, 0.04);
+	--route-hint-bg: rgba(58, 111, 216, 0.1);
+	--route-hint-border: #3a6fd8;
+	--route-hint-color: #2a4a8a;
+	--route-tab-active-bg: rgba(70, 120, 240, 0.18);
+	--route-tab-active-border: #3a6fd8;
+	--route-tab-active-color: #1a3a8a;
+	--route-node-bg: #ffffff;
+	--route-realtime-color: #1f7a3a;
+	--route-transfer-bg: rgba(220, 160, 0, 0.15);
+	--route-transfer-color: #8a6100;
+	--route-warn-color: #c0392b;
+	--route-start-color: #1f9d55;
+	--route-end-color: #d63a3a;
+	--route-walk-color: #7a8290;
+}
+
+html, body {
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+	background: var(--bg-color);
+	font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+	color: var(--text-color);
+	transition: background 0.3s, color 0.3s;
+}
+
+#app {
+	position: relative;
+	width: 100%;
+	height: 100%;
+}
+
+#mapCanvas {
+	display: block;
+	width: 100%;
+	height: 100%;
+	cursor: grab;
+}
+
+#mapCanvas:active {
+	cursor: grabbing;
+}
+
+#infoPanel {
+	position: absolute;
+	top: 10px;
+	left: 10px;
+	background: var(--panel-bg);
+	padding: 12px 16px;
+	border-radius: 8px;
+	border: 1px solid var(--border-color);
+	font-size: 13px;
+	max-width: 300px;
+	transition: background 0.3s, border-color 0.3s;
+}
+
+#status {
+	margin-bottom: 8px;
+	color: var(--status-color);
+	transition: color 0.3s;
+}
+
+#legend {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-size: 12px;
+}
+
+.legend-item {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--legend-item-color);
+	transition: color 0.3s;
+}
+
+.dot {
+	display: inline-block;
+	width: 12px;
+	height: 12px;
+	border-radius: 50%;
+}
+
+.station-dot {
+	background: #ffffff;
+}
+
+/* 换乘站：与地图上的标记一致，用跑道形（胶囊）区分于普通圆点 */
+.interchange-dot {
+	width: 20px;
+	height: 12px;
+	border-radius: 6px;
+	background: #ffffff;
+	border: 2px solid #7ec8e3;
+	box-sizing: border-box;
+}
+
+.depot-dot {
+	background: rgba(255, 200, 0, 0.4);
+	border: 1px solid rgba(255, 200, 0, 0.8);
+}
+
+.player-dot {
+	background: #50fa7b;
+}
+
+.train-dot {
+	background: #ff79c6;
+	border-radius: 3px;
+}
+
+#tooltip {
+	position: fixed;
+	display: none;
+	z-index: 100;
+	pointer-events: none;
+	background: var(--tooltip-bg);
+	border: 1px solid var(--tooltip-border);
+	border-radius: 8px;
+	padding: 10px 14px;
+	font-size: 13px;
+	line-height: 1.6;
+	min-width: 160px;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+	transition: background 0.3s, border-color 0.3s;
+}
+
+#tooltip .tt-title {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-weight: bold;
+	color: var(--tt-title-color);
+	margin-bottom: 4px;
+	transition: color 0.3s;
+}
+
+#tooltip .tt-dot {
+	display: inline-block;
+	width: 10px;
+	height: 10px;
+	border-radius: 2px;
+}
+
+#tooltip .tt-row {
+	display: flex;
+	gap: 6px;
+}
+
+#tooltip .tt-label {
+	color: var(--label-color);
+	transition: color 0.3s;
+}
+
+#controls {
+	position: absolute;
+	bottom: 20px;
+	right: 20px;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 6px;
+}
+
+/* 工具栏主体：折叠时整块隐藏，只留下切换按钮 */
+#controlsBody {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 6px;
+}
+
+#controls.collapsed #controlsBody {
+	display: none;
+}
+
+#controls button {
+	width: 40px;
+	height: 40px;
+	border-radius: 8px;
+	border: 1px solid var(--border-color);
+	background: var(--button-bg);
+	color: var(--button-color);
+	font-size: 18px;
+	cursor: pointer;
+	transition: background 0.2s, color 0.3s, border-color 0.3s;
+}
+
+#fontSelect {
+	width: 118px;
+	height: 32px;
+	padding: 0 6px;
+	border-radius: 8px;
+	border: 1px solid var(--border-color);
+	background: var(--button-bg);
+	color: var(--button-color);
+	font-size: 12px;
+	cursor: pointer;
+	transition: background 0.2s, color 0.3s, border-color 0.3s;
+}
+
+#fontSelect:hover {
+	background: var(--button-hover);
+}
+
+#controls button:hover {
+	background: var(--button-hover);
+}
+
+/* 关闭状态下的按钮（如隐藏车厂）：降低透明度以示区分 */
+#controls button.off {
+	opacity: 0.45;
+}
+
+/* ===== 导出对话框 ===== */
+#exportDialog,
+#tripsDialog,
+#confirmDialog,
+#ticketDialog {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	z-index: 200;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.export-overlay {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background: rgba(0, 0, 0, 0.5);
+}
+
+.export-panel {
+	position: relative;
+	background: var(--panel-bg);
+	border: 1px solid var(--border-color);
+	border-radius: 12px;
+	padding: 24px 28px;
+	min-width: 260px;
+	text-align: center;
+	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+	transition: background 0.3s, border-color 0.3s;
+}
+
+.export-title {
+	font-size: 16px;
+	font-weight: bold;
+	color: var(--text-color);
+	margin-bottom: 16px;
+	transition: color 0.3s;
+}
+
+.export-formats {
+	display: flex;
+	gap: 10px;
+	justify-content: center;
+	margin-bottom: 14px;
+}
+
+.export-fmt-btn {
+	width: 64px;
+	height: 44px;
+	border-radius: 8px;
+	border: 1px solid var(--border-color);
+	background: var(--button-bg);
+	color: var(--button-color);
+	font-size: 15px;
+	font-weight: bold;
+	cursor: pointer;
+	transition: background 0.2s, color 0.3s, border-color 0.3s;
+}
+
+.export-fmt-btn:hover {
+	background: var(--button-hover);
+}
+
+.export-quality {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 16px;
+	font-size: 13px;
+	color: var(--text-color);
+	transition: color 0.3s;
+}
+
+.export-quality input[type="range"] {
+	flex: 1;
+	accent-color: #7ec8e3;
+}
+
+.export-cancel {
+	width: 100%;
+	height: 36px;
+	border-radius: 8px;
+	border: 1px solid var(--border-color);
+	background: var(--button-bg);
+	color: var(--button-color);
+	font-size: 14px;
+	cursor: pointer;
+	transition: background 0.2s, color 0.3s, border-color 0.3s;
+}
+
+.export-cancel:hover {
+	background: var(--button-hover);
+}
+
+/* ===== 路径查询 ===== */
+#routeBtn.active {
+	background: var(--route-active-bg);
+	border-color: var(--route-active-border);
+	color: var(--route-active-color);
+	box-shadow: 0 0 0 2px var(--route-active-bg);
+}
+
+body.route-mode #mapCanvas {
+	cursor: crosshair;
+}
+
+/* 路径面板打开时把右下角控件往左让开 */
+body.route-mode #controls {
+	right: 330px;
+}
+
+#routePanel {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	width: 300px;
+	max-height: calc(100% - 20px);
+	display: flex;
+	flex-direction: column;
+	background: var(--panel-bg);
+	border: 1px solid var(--border-color);
+	border-radius: 10px;
+	padding: 10px 12px 12px;
+	box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+	z-index: 50;
+	font-size: 13px;
+	transition: background 0.3s, border-color 0.3s;
+}
+
+.route-panel-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 8px;
+}
+
+.route-panel-title {
+	font-size: 14px;
+	font-weight: bold;
+	color: var(--tt-title-color);
+	transition: color 0.3s;
+}
+
+.route-close {
+	width: 24px;
+	height: 24px;
+	line-height: 1;
+	font-size: 14px;
+	border-radius: 6px;
+	border: 1px solid var(--border-color);
+	background: transparent;
+	color: var(--button-color);
+	cursor: pointer;
+	transition: background 0.2s, color 0.3s, border-color 0.3s;
+}
+
+.route-close:hover {
+	background: var(--button-hover);
+}
+
+.route-hint {
+	margin-bottom: 8px;
+	padding: 6px 8px;
+	border-radius: 4px;
+	border-left: 3px solid var(--route-hint-border);
+	background: var(--route-hint-bg);
+	color: var(--route-hint-color);
+	font-size: 12px;
+	word-break: break-all;
+	transition: background 0.3s, color 0.3s, border-color 0.3s;
+}
+
+.route-actions {
+	display: flex;
+	gap: 6px;
+	margin-bottom: 8px;
+}
+
+.route-action-primary,
+.route-action-secondary {
+	flex: 1;
+	height: 30px;
+	border-radius: 6px;
+	border: 1px solid var(--border-color);
+	background: var(--button-bg);
+	color: var(--button-color);
+	font-size: 12px;
+	cursor: pointer;
+	transition: background 0.2s, color 0.3s, border-color 0.3s;
+}
+
+.route-action-primary {
+	background: var(--route-primary-bg);
+	border-color: var(--route-primary-border);
+	color: var(--route-primary-color);
+	font-weight: bold;
+}
+
+.route-action-primary:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+.route-action-primary:not(:disabled):hover {
+	background: var(--route-primary-hover);
+}
+
+.route-action-secondary:hover {
+	background: var(--button-hover);
+}
+
+.route-tabs {
+	display: flex;
+	gap: 6px;
+	margin-bottom: 8px;
+}
+
+.route-tab {
+	flex: 1;
+	min-width: 0;
+	height: 28px;
+	border-radius: 6px;
+	border: 1px solid var(--border-color);
+	background: var(--button-bg);
+	color: var(--button-color);
+	font-size: 12px;
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	transition: background 0.2s, color 0.3s, border-color 0.3s;
+}
+
+.route-tab:hover {
+	background: var(--button-hover);
+}
+
+.route-tab.active {
+	background: var(--route-tab-active-bg);
+	border-color: var(--route-tab-active-border);
+	color: var(--route-tab-active-color);
+	font-weight: bold;
+}
+
+.route-detail {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+}
+
+.route-unreachable {
+	padding: 18px 0;
+	text-align: center;
+	font-size: 13px;
+	color: var(--route-warn-color);
+	transition: color 0.3s;
+}
+
+/* 概要：距离 / 时间 / 换乘 */
+.route-summary {
+	display: flex;
+	gap: 6px;
+	margin-bottom: 10px;
+}
+
+.route-summary-item {
+	flex: 1;
+	min-width: 0;
+	padding: 6px 4px;
+	border-radius: 6px;
+	border: 1px solid var(--border-color);
+	background: var(--route-card-bg);
+	text-align: center;
+	transition: background 0.3s, border-color 0.3s;
+}
+
+.route-summary-label {
+	display: block;
+	font-size: 10px;
+	color: var(--label-color);
+	margin-bottom: 2px;
+	transition: color 0.3s;
+}
+
+.route-summary-value {
+	display: block;
+	font-size: 12px;
+	font-weight: bold;
+	color: var(--text-color);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	transition: color 0.3s;
+}
+
+/* 乘车流程（从上到下连续的节点 + 乘车段） */
+.route-flow {
+	display: flex;
+	flex-direction: column;
+}
+
+.route-node {
+	position: relative;
+	display: flex;
+	align-items: flex-start;
+}
+
+/* 竖直线路指示条贯穿节点行，起点从圆心开始、终点到圆心结束 */
+.route-node::before {
+	content: '';
+	position: absolute;
+	left: 11px;
+	top: 0;
+	bottom: 0;
+	width: 4px;
+	border-radius: 2px;
+	background: var(--node-color, var(--border-color));
+}
+
+.route-node.start::before {
+	top: 13px;
+}
+
+.route-node.end::before {
+	bottom: auto;
+	height: 13px;
+}
+
+.route-node-marker {
+	position: relative;
+	z-index: 1;
+	flex: 0 0 26px;
+	width: 26px;
+	height: 26px;
+	margin-right: 8px;
+	border-radius: 50%;
+	border: 3px solid var(--node-color, var(--border-color));
+	background: var(--route-node-bg);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+}
+
+.route-node-marker.transfer {
+	flex: 0 0 18px;
+	width: 18px;
+	height: 18px;
+	margin: 4px 12px 4px 4px;
+	border-width: 2px;
+}
+
+.route-node-icon {
+	font-size: 12px;
+	line-height: 1;
+}
+
+.route-node-text {
+	flex: 1;
+	min-width: 0;
+	padding-top: 3px;
+}
+
+.route-node-name {
+	font-size: 13px;
+	font-weight: bold;
+	color: var(--text-color);
+	word-break: break-all;
+	transition: color 0.3s;
+}
+
+.route-node-sub {
+	font-size: 11px;
+	color: var(--label-color);
+	transition: color 0.3s;
+}
+
+.route-realtime {
+	margin-top: 2px;
+	font-size: 11px;
+	color: var(--route-realtime-color);
+	transition: color 0.3s;
+}
+
+/* 两站之间的乘车段 */
+.route-ride {
+	position: relative;
+	min-height: 46px;
+}
+
+.route-ride-line {
+	position: absolute;
+	left: 11px;
+	top: 0;
+	bottom: 0;
+	width: 4px;
+	border-radius: 2px;
+}
+
+.route-ride-body {
+	margin-left: 34px;
+	padding: 4px 0;
+}
+
+.route-ride-toggle {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	padding: 5px 8px;
+	border-radius: 6px;
+	border: 1px solid var(--border-color);
+	background: var(--route-card-bg);
+	color: var(--text-color);
+	font-size: 12px;
+	text-align: left;
+	cursor: pointer;
+	transition: background 0.2s, color 0.3s, border-color 0.3s;
+}
+
+.route-ride-toggle:hover {
+	background: var(--button-hover);
+}
+
+.route-ride-toggle.empty {
+	cursor: default;
+}
+
+.route-ride-toggle.empty:hover {
+	background: var(--route-card-bg);
+}
+
+.route-ride-linetag {
+	flex: 0 1 auto;
+	max-width: 110px;
+	padding: 0 6px;
+	border: 1px solid var(--border-color);
+	border-radius: 10px;
+	font-size: 11px;
+	line-height: 16px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.route-ride-count {
+	flex: 1 1 auto;
+	font-size: 11px;
+	color: var(--label-color);
+	transition: color 0.3s;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* 乘车方向（开往的终点站），用线路色加粗显示 */
+.route-ride-dir {
+	font-weight: 600;
+}
+
+.route-ride-arrow {
+	flex: 0 0 auto;
+	font-size: 11px;
+	color: var(--label-color);
+	transition: transform 0.2s, color 0.3s;
+}
+
+.route-ride.expanded .route-ride-arrow {
+	transform: rotate(180deg);
+}
+
+.route-ride-stations {
+	display: none;
+	padding: 4px 0 0 6px;
+}
+
+.route-ride.expanded .route-ride-stations {
+	display: block;
+}
+
+.route-ride-station {
+	font-size: 11px;
+	color: var(--label-color);
+	padding: 1px 0;
+	transition: color 0.3s;
+}
+
+.route-ride-station::before {
+	content: '·';
+	margin-right: 4px;
+}
+
+/* 两站之间的站外步行段（虚线 + 步行距离） */
+.route-walk {
+	position: relative;
+	min-height: 40px;
+}
+
+.route-walk-line {
+	position: absolute;
+	left: 11px;
+	top: 0;
+	bottom: 0;
+	width: 4px;
+	border-radius: 2px;
+	background-image: repeating-linear-gradient(
+		to bottom,
+		var(--route-walk-color) 0 4px,
+		transparent 4px 8px
+	);
+}
+
+.route-walk-body {
+	margin-left: 34px;
+	padding: 8px 0;
+}
+
+.route-walk-label {
+	display: inline-block;
+	padding: 3px 8px;
+	border-radius: 10px;
+	border: 1px dashed var(--route-walk-color);
+	background: var(--route-card-bg);
+	color: var(--text-color);
+	font-size: 11px;
+	transition: background 0.3s, color 0.3s, border-color 0.3s;
+}
+
+.route-transfer-hint {
+	display: inline-block;
+	margin-top: 3px;
+	padding: 3px 6px;
+	border-radius: 4px;
+	background: var(--route-transfer-bg);
+	color: var(--route-transfer-color);
+	font-size: 11px;
+	transition: background 0.3s, color 0.3s;
+}
+
+/* ===== 左上角用户卡片（头像 + 用户名）===== */
+#userCard {
+	position: absolute;
+	top: 10px;
+	left: 10px;
+	z-index: 60;
+	font-size: 13px;
+}
+
+/* 用户卡片出现时，把下面的状态面板往下让开 */
+body.has-user #infoPanel {
+	top: 62px;
+}
+
+.user-card-main {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 12px 6px 6px;
+	border-radius: 22px;
+	border: 1px solid var(--border-color);
+	background: var(--panel-bg);
+	cursor: pointer;
+	user-select: none;
+	transition: background 0.2s, border-color 0.3s;
+}
+
+.user-card-main:hover {
+	background: var(--button-hover);
+}
+
+.user-card-main img {
+	width: 32px;
+	height: 32px;
+	border-radius: 50%;
+	image-rendering: pixelated;
+	background: rgba(0, 0, 0, 0.2);
+}
+
+#userName {
+	color: var(--tt-title-color);
+	font-weight: 600;
+	transition: color 0.3s;
+}
+
+.user-menu {
+	position: absolute;
+	top: 48px;
+	left: 0;
+	min-width: 150px;
+	padding: 6px;
+	border-radius: 8px;
+	border: 1px solid var(--border-color);
+	background: var(--panel-bg);
+	box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.user-menu button {
+	display: block;
+	width: 100%;
+	padding: 8px 10px;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--text-color);
+	font-size: 13px;
+	text-align: left;
+	cursor: pointer;
+	transition: background 0.2s, color 0.3s;
+}
+
+.user-menu button:hover {
+	background: var(--button-hover);
+}
+
+/* ===== 「我的位置」按钮 ===== */
+.route-my-row {
+	margin-top: 8px;
+}
+
+.route-action-my {
+	width: 100%;
+	height: 32px;
+	border-radius: 8px;
+	border: 1px solid var(--border-color);
+	background: var(--route-card-bg);
+	color: var(--text-color);
+	font-size: 13px;
+	cursor: pointer;
+	transition: background 0.2s, color 0.3s, border-color 0.3s;
+}
+
+.route-action-my:hover {
+	background: var(--button-hover);
+}
+
+.route-action-my:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+/* 从我的位置步行到起点站的说明块 */
+.route-from-loc {
+	margin: 0 0 4px 0;
+	padding: 6px 8px;
+	border-radius: 6px;
+	border: 1px dashed var(--route-walk-color);
+	background: var(--route-card-bg);
+	font-size: 11px;
+	color: var(--text-color);
+	transition: background 0.3s, color 0.3s;
+}
+
+/* 步行方位（东/南/西/北……）高亮 */
+.route-walk-dir {
+	font-weight: 600;
+	color: var(--route-hint-color);
+	transition: color 0.3s;
+}
+
+/* ===== 行程记录 ===== */
+.trips-panel {
+	width: 460px;
+	max-width: 92vw;
+	text-align: left;
+}
+
+.trips-list {
+	max-height: 52vh;
+	overflow-y: auto;
+	margin-bottom: 14px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.trips-empty {
+	padding: 18px 0;
+	text-align: center;
+	font-size: 13px;
+	color: var(--label-color);
+	transition: color 0.3s;
+}
+
+.trip-item {
+	padding: 10px 12px;
+	border-radius: 8px;
+	border: 1px solid var(--border-color);
+	background: var(--route-card-bg);
+	transition: background 0.3s, border-color 0.3s;
+}
+
+.trip-item-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	margin-bottom: 4px;
+}
+
+.trip-item-route {
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--tt-title-color);
+	transition: color 0.3s;
+}
+
+.trip-item-status {
+	flex: 0 0 auto;
+	padding: 2px 8px;
+	border-radius: 10px;
+	font-size: 11px;
+}
+
+.trip-item-status.completed {
+	background: rgba(46, 204, 113, 0.18);
+	color: var(--route-start-color);
+}
+
+.trip-item-status.stopped {
+	background: rgba(154, 160, 166, 0.2);
+	color: var(--route-walk-color);
+}
+
+.trip-item-meta {
+	font-size: 11px;
+	color: var(--label-color);
+	transition: color 0.3s;
+}
+
+.trip-item-actions {
+	display: flex;
+	gap: 8px;
+	margin-top: 8px;
+}
+
+.trip-item-actions button {
+	flex: 1 1 auto;
+	height: 30px;
+	border-radius: 6px;
+	border: 1px solid var(--border-color);
+	background: var(--button-bg);
+	color: var(--button-color);
+	font-size: 12px;
+	cursor: pointer;
+	transition: background 0.2s, color 0.3s;
+}
+
+.trip-item-actions button:hover {
+	background: var(--button-hover);
+}
+
+/* ===== 确认框 ===== */
+.confirm-panel {
+	min-width: 280px;
+}
+
+.confirm-message {
+	font-size: 13px;
+	color: var(--text-color);
+	margin-bottom: 16px;
+	transition: color 0.3s;
+}
+
+.confirm-actions {
+	display: flex;
+	gap: 10px;
+}
+
+.confirm-actions button {
+	flex: 1 1 auto;
+	height: 36px;
+	border-radius: 8px;
+	border: 1px solid var(--border-color);
+	font-size: 14px;
+	cursor: pointer;
+}
+
+/* ===== 纪念票根 ===== */
+.ticket-panel {
+	width: 420px;
+	max-width: 92vw;
+}
+
+#ticketPreview {
+	display: block;
+	width: 100%;
+	max-height: 46vh;
+	object-fit: contain;
+	margin-bottom: 14px;
+	border-radius: 8px;
+	background: #ffffff;
+}
+
+.ticket-actions {
+	display: flex;
+	gap: 8px;
+}
+
+.ticket-actions button {
+	flex: 1 1 auto;
+	height: 36px;
+	border-radius: 8px;
+	border: 1px solid var(--border-color);
+	font-size: 13px;
+	cursor: pointer;
+}

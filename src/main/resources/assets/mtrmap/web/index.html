@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>MTR 地图</title>
+	<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+	<div id="app">
+		<canvas id="mapCanvas"></canvas>
+		<div id="infoPanel">
+			<div id="status">正在加载...</div>
+			<div id="legend"></div>
+		</div>
+		<div id="tooltip"></div>
+		<div id="userCard" style="display:none">
+			<div class="user-card-main" id="userCardMain">
+				<img id="userAvatar" alt="">
+				<span id="userName"></span>
+			</div>
+			<div class="user-menu" id="userMenu" style="display:none">
+				<button id="userTripsBtn">行程记录</button>
+			</div>
+		</div>
+		<div id="routePanel" style="display:none">
+			<div class="route-panel-head">
+				<div class="route-panel-title" id="routePanelTitle">路径查询</div>
+				<button class="route-close" id="routeCloseBtn" title="关闭">×</button>
+			</div>
+			<div class="route-hint" id="routeHint">请选择起点</div>
+			<div class="route-actions">
+				<button class="route-action-primary" id="routeSearchBtn" disabled>立即查询</button>
+				<button class="route-action-secondary" id="routeClearBtn">清除</button>
+			</div>
+			<div class="route-my-row">
+				<button class="route-action-my" id="routeMyLocationBtn">📍 我的位置</button>
+			</div>
+			<div class="route-tabs" id="routeTabs"></div>
+			<div class="route-detail" id="routeDetail"></div>
+		</div>
+		<div id="controls">
+			<button id="controlsToggle" title="展开/折叠工具栏">▾</button>
+			<div id="controlsBody">
+				<button id="routeBtn" title="路径查询">⇄</button>
+				<button id="themeToggle" title="夜间模式">☾</button>
+				<button id="langToggle" title="English">EN</button>
+				<button id="exportBtn" title="导出图片">↓</button>
+				<button id="depotBtn" title="显示/隐藏车厂">▣</button>
+				<button id="zoomIn" title="放大">+</button>
+				<button id="zoomOut" title="缩小">-</button>
+				<button id="reset" title="重置视图">⊙</button>
+				<select id="fontSelect" title="地图字体"></select>
+			</div>
+		</div>
+		<div id="exportDialog" style="display:none">
+			<div class="export-overlay" id="exportOverlay"></div>
+			<div class="export-panel">
+				<div class="export-title" id="exportTitle">导出图片</div>
+				<div class="export-formats">
+					<button class="export-fmt-btn" data-format="png">PNG</button>
+					<button class="export-fmt-btn" data-format="jpeg">JPG</button>
+					<button class="export-fmt-btn" data-format="webp">WebP</button>
+				</div>
+				<div class="export-quality" id="exportQualityRow">
+					<label id="qualityLabel">质量:</label>
+					<input type="range" id="qualitySlider" min="1" max="100" value="92">
+					<span id="qualityDisplay">92%</span>
+				</div>
+				<button class="export-cancel" id="exportCancel">取消</button>
+			</div>
+		</div>
+		<div id="tripsDialog" style="display:none">
+			<div class="export-overlay" id="tripsOverlay"></div>
+			<div class="export-panel trips-panel">
+				<div class="export-title" id="tripsTitle">行程记录</div>
+				<div class="trips-list" id="tripsList"></div>
+				<button class="export-cancel" id="tripsClose">关闭</button>
+			</div>
+		</div>
+		<div id="confirmDialog" style="display:none">
+			<div class="export-overlay" id="confirmOverlay"></div>
+			<div class="export-panel confirm-panel">
+				<div class="export-title" id="confirmTitle">确认</div>
+				<div class="confirm-message" id="confirmMessage"></div>
+				<div class="confirm-actions">
+					<button class="export-cancel" id="confirmCancel">取消</button>
+					<button class="route-action-primary" id="confirmOk">确认</button>
+				</div>
+			</div>
+		</div>
+		<div id="ticketDialog" style="display:none">
+			<div class="export-overlay" id="ticketOverlay"></div>
+			<div class="export-panel ticket-panel">
+				<div class="export-title" id="ticketTitle">纪念票根</div>
+				<img id="ticketPreview" alt="ticket">
+				<div class="ticket-actions">
+					<button class="route-action-secondary" id="ticketSave">直接保存</button>
+					<button class="route-action-primary" id="ticketPrint">打开打印页面</button>
+					<button class="export-cancel" id="ticketCancel">取消</button>
+				</div>
+			</div>
+		</div>
+	</div>
+	<script src="/map.js"></script>
+</body>
+</html>

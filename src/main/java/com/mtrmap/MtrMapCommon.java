@@ -1,0 +1,188 @@
+package com.mtrmap;
+
+import com.mojang.brigadier.arguments.BoolArgumentType;
+import com.mtrmap.config.MtrMapConfig;
+import com.mtrmap.server.AvatarHandler;
+import com.mtrmap.server.MapDataCollector;
+import com.mtrmap.server.MapHttpServer;
+import com.mtrmap.server.NavTaskStore;
+import com.mtrmap.server.PlayerTracker;
+import com.mtrmap.server.RailPathFinder;
+import com.mtrmap.server.TripStore;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
+
+// MC 1.17 起自带了 slf4j-api；1.16.5 只有 log4j2，所以日志门面按版本二选一。
+// 两边的 Logger 都有 info/warn/error/debug 与 {} 占位符，调用处无需分支。
+//? if >=1.17 {
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+//?} else {
+/*import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+*///?}
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.UUID;
+
+/**
+ * MTR 地图模组在服务端（及通用侧）的逻辑，与具体加载器无关。
+ *
+ * <p>在服务器启动时启动 HTTP 服务器（端口由 mods/mapconfig/mtrmap.json 配置，默认 1145），
+ * 在服务器关闭时停止；每个 tick 末刷新玩家位置；提供
+ * {@code /mtrmap showdepots <true|false>} 命令；并接收客户端经网络通道推送的头像。
+ *
+ * <p>该类的各个回调由平台模块（fabric / forge）的事件转接器调用。
+ */
+public final class MtrMapCommon {
+
+    //? if >=1.17 {
+    public static final Logger LOGGER = LoggerFactory.getLogger("MTR Map");
+    //?} else {
+    /*public static final Logger LOGGER = LogManager.getLogger("MTR Map");
+    *///?}
+
+    /** 客户端推送头像所使用的网络通道 */
+    //? if >=1.21.1 {
+    /*public static final ResourceLocation AVATAR_CHANNEL =
+            ResourceLocation.fromNamespaceAndPath("mtrmap", "avatar");
+    *///?} else {
+    public static final ResourceLocation AVATAR_CHANNEL = new ResourceLocation("mtrmap", "avatar");
+    //?}
+
+    private static MinecraftServer currentServer;
+
+    private MtrMapCommon() {
+    }
+
+    /** 加载配置等通用初始化。 */
+    public static void init() {
+        LOGGER.info("正在初始化 MTR Map 模组...");
+        MtrMapConfig.load();
+        LOGGER.info("MTR Map 模组初始化完成");
+    }
+
+    /** 服务器启动：起 HTTP、采集线网数据。 */
+    public static void onServerStarted(MinecraftServer server) {
+        currentServer = server;
+        PlayerTracker.clear();
+        NavTaskStore.clear();
+        TripStore.clear();
+        RailPathFinder.clear();
+        MapDataCollector.captureRailwayData(server);
+        try {
+            int port = MtrMapConfig.getPort();
+            MapHttpServer.start(port, server);
+            LOGGER.info("MTR Map HTTP 服务器已启动于 http://localhost:{}", port);
+        } catch (Exception e) {
+            LOGGER.error("MTR Map HTTP 服务器启动失败", e);
+        }
+    }
+
+    /** 服务器关闭：停 HTTP、清数据。 */
+    public static void onServerStopping(MinecraftServer server) {
+        try {
+            MapHttpServer.stop();
+            LOGGER.info("MTR Map HTTP 服务器已停止");
+        } catch (Exception e) {
+            LOGGER.error("MTR Map HTTP 服务器停止失败", e);
+        }
+        currentServer = null;
+        NavTaskStore.clear();
+        TripStore.clear();
+        MapDataCollector.clearRailwayData();
+    }
+
+    /** 每个 tick 末更新玩家位置。 */
+    public static void onServerTick(MinecraftServer server) {
+        PlayerTracker.update(server);
+    }
+
+    /** 注册 /mtrmap showdepots <true|false> 命令。 */
+    public static void registerCommands(com.mojang.brigadier.CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(Commands.literal("mtrmap")
+                .then(Commands.literal("showdepots")
+                        .then(Commands.argument("value", BoolArgumentType.bool())
+                                .executes(context -> {
+                                    boolean value = BoolArgumentType.getBool(context, "value");
+                                    MtrMapConfig.setShowDepots(value);
+                                    MtrMapConfig.save();
+                                    // 1.19.2 的 sendSuccess 直接收 Component，1.20.1 起才收 Supplier
+                                    //? if >=1.20.1 {
+                                    context.getSource().sendSuccess(() ->
+                                            literal("§a车厂显示已设置为: " + value), false);
+                                    //?} else {
+                                    /*context.getSource().sendSuccess(
+                                            literal("§a车厂显示已设置为: " + value), false);
+                                    *///?}
+                                    return 1;
+                                }))));
+    }
+
+    /**
+     * 构造一个纯文本 Component。
+     *
+     * <p>{@code Component.literal} 是 MC 1.19 才加的，1.18.2 与 1.16.5 只能用
+     * {@code TextComponent}；老分支里写全限定名，免得给老版本引入一个在新版本已经删掉的 import。
+     */
+    //? if >=1.19 {
+    private static Component literal(String text) {
+        return Component.literal(text);
+    }
+    //?} else {
+    /*private static Component literal(String text) {
+        return new net.minecraft.network.chat.TextComponent(text);
+    }
+    *///?}
+
+    /** 收到客户端推送的头像：仅接受当前在线玩家对应的头像。 */
+    public static void onAvatarReceived(MinecraftServer server, UUID uuid, byte[] png) {
+        if (server == null || uuid == null || png == null || png.length == 0) {
+            return;
+        }
+        server.execute(() -> {
+            if (server.getPlayerList().getPlayer(uuid) != null) {
+                AvatarHandler.putAvatar(uuid.toString(), png);
+            }
+        });
+    }
+
+    public static MinecraftServer getCurrentServer() {
+        return currentServer;
+    }
+
+    /**
+     * 读空一个输入流。
+     *
+     * <p>{@code InputStream.readAllBytes} 是 Java 9 才加的，而 1.16.5 的编译目标是 Java 8，
+     * 所以这里手写一份等价的实现，所有版本共用。
+     */
+    public static byte[] readAll(InputStream in) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int read;
+        while ((read = in.read(buffer)) != -1) {
+            out.write(buffer, 0, read);
+        }
+        return out.toByteArray();
+    }
+
+    /**
+     * 解析 JSON 字符串。
+     *
+     * <p>静态的 {@code JsonParser.parseString} 是 Gson 2.8.6 才加的，MC 1.16.5 自带的 Gson
+     * 更老，只能用实例方法；1.18.2 起用静态写法。
+     */
+    public static com.google.gson.JsonElement parseJson(String json) {
+        //? if >=1.18.2 {
+        return com.google.gson.JsonParser.parseString(json);
+        //?} else {
+        /*return new com.google.gson.JsonParser().parse(json);
+        *///?}
+    }
+}

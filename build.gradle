@@ -1,0 +1,396 @@
+// 这个脚本是 Stonecutter 的「中心脚本」：每个版本节点都会执行一次。
+// 根节点的 src/ 就是 common（与加载器无关的服务端逻辑、网页资源、Xaero 叠加层）。
+plugins {
+    id "dev.architectury.loom"
+    id "architectury-plugin"
+}
+
+def sc = stonecutter
+def mc = sc.current.version
+def modVersion = property("mod.version")
+// 本地 JDK 21；MC 1.20.5 起要求 Java 21，1.17~1.20.4 用 17，1.16.5 及更早用 8
+def mcMinor = mc.split("\\.")[1] as int
+def javaVersion = mcMinor >= 21 ? JavaVersion.VERSION_21
+        : (mcMinor >= 17 ? JavaVersion.VERSION_17 : JavaVersion.VERSION_1_8)
+def javaRelease = mcMinor >= 21 ? 21 : (mcMinor >= 17 ? 17 : 8)
+
+// 当前 MC 版本支持哪些加载器（在 versions/<mc>/gradle.properties 里显式声明）
+def platforms = property("mod.platforms").toString().split(",")
+
+version = modVersion
+base {
+    archivesName = "${property("mod.id")}-common"
+}
+
+architectury {
+    common(platforms as String[])
+}
+
+// Mixin refmap：Loom 给 common 生成的 refmap 名字带 MC 版本号（如 mtrmap-common-1.20.1-refmap.json），
+// 而共享的 mtrmap.mixins.json 里 "refmap" 字段只能写死一个固定名字，所以由各平台脚本的
+// shadowJar 打包时把它改名为 mtrmap-common-refmap.json（见 fabric/forge 的 shadowJar）。
+// NeoForge 1.20.2+ 运行时用官方名、不需要 refmap，故 neoforge 分支不做改名：它的 jar 里
+// 没有 mtrmap-common-refmap.json，Mixin 只会打一条 "could not be read ... can ignore" 警告，
+// 不会影响注入（注入直接按官方名匹配）。
+// 注意：不能给 common 设 loom.mixin.defaultRefmapName —— 那会把 1.21.1 的 intermediary
+// refmap 也改名成 mtrmap-common-refmap.json，反而让 neoforge 加载并使用错误的映射。
+
+repositories {
+    mavenCentral()
+    maven { url = "https://maven.fabricmc.net/" }
+    maven { url = "https://maven.architectury.dev/" }
+    maven { url = "https://maven.minecraftforge.net/" }
+    maven { url = "https://maven.neoforged.net/releases/" }
+    // Forge userdev 从该仓库拉 org.spongepowered:mixin
+    maven { url = "https://repo.spongepowered.org/repository/maven-public/" }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${mc}"
+    mappings loom.officialMojangMappings()
+
+    // Fabric loader 只用于共享的 @Environment 注解，以及把 Mixin 依赖带上 common 的类路径。
+    // common 代码本身不得使用任何加载器专属 API。
+    modImplementation "net.fabricmc:fabric-loader:${property("deps.fabric_loader")}"
+
+    // MTR 各版本分支的产物都是生产 jar（intermediary 命名），必须经 Loom 重映射成 official
+    // 才能被（以官方映射编译的）common 代码引用。用 compileOnly 会直接报找不到 net.minecraft.class_xxxx。
+    modImplementation rootProject.files("libs/${property("deps.mtr_fabric_jar")}")
+}
+
+// mod 的 jar 根目录必须有 pack.mcmeta，否则 Forge 会报
+// "Failed to load a valid ResourcePackInfo" 并丢弃整个 mod 资源包，
+// 结果是语言文件不加载、按钮文字显示成原始 key（key.mtrmap.map_button）。
+// pack_format 每个 MC 版本不同，所以这里按当前版本填进去；新版本节点要在这里补一条映射。
+def packFormat = ["1.16.5": 6, "1.18.2": 8, "1.19.2": 9, "1.20.1": 15, "1.21.1": 34][mc]
+if (packFormat == null) {
+    throw new GradleException("pack.mcmeta 缺少 MC ${mc} 的 pack_format 映射")
+}
+// Mixin 的 compatibilityLevel：Forge 1.16.5 自带的是 Mixin 0.8.4，它的 CompatibilityLevel
+// 枚举里还没有 JAVA_17，写成 JAVA_17 会在解析 mixin 配置时直接抛 IllegalArgumentException。
+// 1.16.5 的字节码本身也是 Java 8，所以这里跟着降到 JAVA_8。
+def mixinCompat = ["1.16.5": "JAVA_8", "1.18.2": "JAVA_17", "1.19.2": "JAVA_17",
+                   "1.20.1": "JAVA_17", "1.21.1": "JAVA_17"][mc]
+
+processResources {
+    inputs.property "packFormat", packFormat
+    filesMatching("pack.mcmeta") {
+        expand "packFormat": packFormat
+    }
+    inputs.property "compatibilityLevel", mixinCompat
+    filesMatching("mtrmap.mixins.json") {
+        expand "compatibilityLevel": mixinCompat
+    }
+}
+
+java {
+    sourceCompatibility = javaVersion
+    targetCompatibility = javaVersion
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
+    options.release = javaRelease
+}
+
+tasks.build {
+    group = "versioned"
+    description = "Must run through 'chiseledBuild'"
+}
+
+// 把产物收集到 build/libs/<mod 版本>/<MC 版本>/<加载器>（chiseledBuild 会调用）
+tasks.register("buildAndCollect", Copy) {
+    group = "versioned"
+    dependsOn tasks.named("build")
+    from(tasks.named("jar"))
+    into(rootProject.layout.buildDirectory.dir("libs/${modVersion}/${mc}/common"))
+}
+
+// ============================================================================
+// 双加载器通用 jar：外壳（元数据 + 最小桥接类）+ 内嵌两个真实 jar
+// ============================================================================
+// 同一个 MC 版本下，两个加载器的产物字节码并不相同（Forge 用 SRG 名、Fabric 用
+// intermediary 名，且各自还带平台专属类），直接压成一个 jar 必然同类名冲突，所以用
+// "外壳 + 内嵌"：
+//   · 外壳：桥接 mod（id = mtrmap_bridge），只放元数据和"外壳必须有一个真实 @Mod 类"所需的
+//     最小桥接类（见下方 generateBridgeSource，Forge 不接受一个类都没有的 javafml mod）；
+//     外壳里没有 mixin 声明，也没有平台专属类。
+//   · 内嵌：两个真实 jar 原样放进 META-INF/jars/，由各加载器自己的嵌套加载机制取出
+//     属于自己的那一个 —— Fabric 看 fabric.mod.json 的 "jars"，Forge / NeoForge 看
+//     JarJar 的 META-INF/jarjar/metadata.json。
+// 内嵌 jar 保持原样，所以 Mixin 的注册方式与单独安装该平台的 jar 完全一致：Forge 靠
+// MANIFEST 的 MixinConfigs，NeoForge 靠 neoforge.mods.toml 的 [[mixins]]，Fabric 靠
+// fabric.mod.json 的 mixins。
+// 代价：mod 列表里会多出一个没有实际内容的 "MTR Map Bridge" 外壳条目。
+//
+// 平台专属的加载器名：1.16.5 / 1.18.2 / 1.19.2 / 1.20.1 是 fabric + forge，1.21.1 是 fabric + neoforge
+def bridgePlatformPaths = platforms.collect { loader -> ":${loader}:${mc}" }
+        .findAll { path -> rootProject.findProject(path) != null }
+// 1.16.5 例外：Forge 36.x 没有 JarJar，"外壳 + 内嵌" 的通用 jar 在 Forge 端加载不了，
+// 所以这个版本不走通用 jar，直接输出 fabric / forge 两个独立 jar
+// （两个平台脚本各自的 buildAndCollect 会分别收进 build/libs/<mod>/<mc>/<loader>）。
+def supportsUniversalJar = mc != "1.16.5"
+// 只在版本节点（:1.20.1 这种）上生成，根项目本身不生成
+if (supportsUniversalJar && bridgePlatformPaths.size() >= 2 && project.path == ":${mc}") {
+    def archGroup = property("mod.group").toString()
+    def archArtifact = property("mod.id").toString()
+    def bridgeId = "${archArtifact}_bridge"
+    def bridgeDir = layout.buildDirectory.dir("bridge-meta")
+    // Forge 的 FML 语言提供者版本只有主版本号（1.20.1 是 47、1.19.2 是 43）
+    def fmlLoaderVersion = property("deps.forge_loader").toString().split("-").last().split("\\.")[0]
+    def neoforgeVersion = property("deps.neoforge_loader").toString()
+    def mcDepFabric = property("mod.mc_dep_fabric").toString()
+    def mcDepForgelike = property("mod.mc_dep_forgelike").toString()
+    def mtrDep = property("mod.mtr_dep").toString()
+    def fabricLoader = property("deps.fabric_loader").toString()
+    def hasForge = platforms.contains("forge")
+    def hasNeoForge = platforms.contains("neoforge")
+    def forgelike = hasForge ? "forge" : (hasNeoForge ? "neoforge" : null)
+    def fabricJarName = "${archArtifact}-fabric-${modVersion}.jar"
+    def forgelikeJarName = forgelike == null ? null : "${archArtifact}-${forgelike}-${modVersion}.jar"
+
+    tasks.register("generateBridgeMeta") {
+        group = "versioned"
+        description = "生成双加载器通用 jar 的外壳元数据"
+        def outDir = bridgeDir
+        inputs.property "bridgeId", bridgeId
+        inputs.property "archGroup", archGroup
+        inputs.property "archArtifact", archArtifact
+        inputs.property "version", modVersion
+        inputs.property "mc", mc
+        inputs.property "platforms", platforms.join(",")
+        inputs.property "mcDepFabric", mcDepFabric
+        inputs.property "mcDepForgelike", mcDepForgelike
+        inputs.property "mtrDep", mtrDep
+        inputs.property "fabricLoader", fabricLoader
+        inputs.property "fmlLoaderVersion", fmlLoaderVersion
+        inputs.property "neoforgeVersion", neoforgeVersion
+        inputs.property "packFormat", packFormat
+        inputs.property "fabricJarName", fabricJarName
+        inputs.property "forgelikeJarName", String.valueOf(forgelikeJarName)
+        outputs.dir outDir
+
+        doLast {
+            def dir = outDir.get().asFile
+            dir.deleteDir()
+            new File(dir, "META-INF/jars").mkdirs()
+            // 显式按 UTF-8 写：Windows + JDK 17 的默认字符集可能是 GBK，
+            // 直接 File.text 会让中文变成乱码（Forge/Fabric 都按 UTF-8 读元数据）
+            def write = { File f, String content -> f.setText(content, "UTF-8") }
+
+            // pack.mcmeta：外壳本身没有资源，但缺了它 Forge 会报
+            // "Failed to load a valid ResourcePackInfo" 并丢弃该 mod 的资源包
+            write(new File(dir, "pack.mcmeta"), """{
+  "pack": {
+    "pack_format": ${packFormat},
+    "description": "MTR Map Bridge"
+  }
+}
+""")
+
+            // Fabric 外壳：靠 "jars" 让 Fabric Loader 取出内嵌的 fabric 真实 jar
+            write(new File(dir, "fabric.mod.json"), """{
+  "schemaVersion": 1,
+  "id": "${bridgeId}",
+  "version": "${modVersion}",
+  "name": "MTR Map Bridge",
+  "description": "双加载器通用外壳：真正的模组是它内嵌的 mtrmap-fabric.jar，由 Fabric Loader 自动加载。",
+  "authors": [
+    "MTR Map Team"
+  ],
+  "license": "Apache-2.0",
+  "environment": "*",
+  "jars": [
+    { "file": "META-INF/jars/${fabricJarName}" }
+  ],
+  "depends": {
+    "fabricloader": ">=${fabricLoader}",
+    "minecraft": "${mcDepFabric}",
+    "java": ">=${javaRelease}"
+  }
+}
+""")
+
+            if (hasForge) {
+                new File(dir, "META-INF").mkdirs()
+                write(new File(dir, "META-INF/mods.toml"), """modLoader = "javafml"
+loaderVersion = "[${fmlLoaderVersion},)"
+license = "Apache-2.0"
+
+[[mods]]
+modId = "${bridgeId}"
+version = "${modVersion}"
+displayName = "MTR Map Bridge"
+authors = "MTR Map Team"
+description = '''
+双加载器通用外壳：真正的模组是本 jar 内 META-INF/jars 下的 mtrmap-forge.jar，由 Forge 自带的 JarJar 自动加载。
+'''
+
+[[dependencies.${bridgeId}]]
+modId = "mtr"
+mandatory = true
+versionRange = "${mtrDep}"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.${bridgeId}]]
+modId = "forge"
+mandatory = true
+versionRange = "[${fmlLoaderVersion},)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.${bridgeId}]]
+modId = "minecraft"
+mandatory = true
+versionRange = "${mcDepForgelike}"
+ordering = "NONE"
+side = "BOTH"
+""")
+            }
+
+            if (hasNeoForge) {
+                new File(dir, "META-INF").mkdirs()
+                write(new File(dir, "META-INF/neoforge.mods.toml"), """modLoader = "javafml"
+loaderVersion = "[1,)"
+license = "Apache-2.0"
+
+[[mods]]
+modId = "${bridgeId}"
+version = "${modVersion}"
+displayName = "MTR Map Bridge"
+authors = "MTR Map Team"
+description = '''
+双加载器通用外壳：真正的模组是本 jar 内 META-INF/jars 下的 mtrmap-neoforge.jar，由 NeoForge 自带的 JarJar 自动加载。
+'''
+
+[[dependencies.${bridgeId}]]
+modId = "mtr"
+type = "required"
+versionRange = "${mtrDep}"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.${bridgeId}]]
+modId = "neoforge"
+type = "required"
+versionRange = "[${neoforgeVersion},)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.${bridgeId}]]
+modId = "minecraft"
+type = "required"
+versionRange = "${mcDepForgelike}"
+ordering = "NONE"
+side = "BOTH"
+""")
+            }
+
+            // JarJar 清单：只放 forgelike 的那个真实 jar，Fabric 不读这个文件
+            if (forgelikeJarName != null) {
+                def jarjarDir = new File(dir, "META-INF/jarjar")
+                jarjarDir.mkdirs()
+                write(new File(jarjarDir, "metadata.json"), """{
+  "jars": [
+    {
+      "identifier": { "group": "${archGroup}", "artifact": "${archArtifact}" },
+      "version": { "range": "[${modVersion},)", "artifactVersion": "${modVersion}" },
+      "path": "META-INF/jars/${forgelikeJarName}",
+      "isObfuscated": false
+    }
+  ]
+}
+""")
+            }
+        }
+    }
+
+    // 外壳必须有一个真实存在的 @Mod 类。Forge 的 FML 会校验 mods.toml 里声明的每个 mod
+    // 都能在 jar 内扫到对应的 @Mod 注解，纯元数据（一个类都没有）的 javafml mod 会被直接拒绝：
+    //   File ...mtrmap-2.1.2-1.20.1-universal.jar constructed 0 mods: [], but had 1 mods specified: [mtrmap_bridge]
+    //   net.minecraftforge.fml.ModLoadingException: The Mod File ... has mods that were not found
+    // 所以构建期生成并就地编译一个最小的桥接类，外壳不需要任何真实逻辑。
+    // 编译不依赖任何平台工程：@Mod 只用一个同 FQN 的桩注解参与编译，字节码里记录的注解类型
+    // 就是加载器的真名（net.minecraftforge / net.neoforged），运行期由加载器自己的注解类解析；
+    // 桩注解的 class 文件不会被打进 jar，不会顶掉加载器真正的注解。
+    def bridgeModPackage = hasForge ? "net.minecraftforge.fml.common" : "net.neoforged.fml.common"
+    def bridgeModPkgPath = bridgeModPackage.replace(".", "/")
+    def bridgeSrcDir = layout.buildDirectory.dir("bridge-src")
+    def bridgeClassesDir = layout.buildDirectory.dir("bridge-classes")
+
+    tasks.register("generateBridgeSource") {
+        group = "versioned"
+        description = "生成外壳用的最小 @Mod 桥接类源码"
+        def outDir = bridgeSrcDir
+        inputs.property "bridgeModPackage", bridgeModPackage
+        inputs.property "bridgeId", bridgeId
+        outputs.dir outDir
+        doLast {
+            def dir = outDir.get().asFile
+            dir.deleteDir()
+            def write = { File f, String content -> f.setText(content, "UTF-8") }
+
+            def pkgDir = new File(dir, bridgeModPkgPath)
+            pkgDir.mkdirs()
+            write(new File(pkgDir, "Mod.java"), """package ${bridgeModPackage};
+
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+public @interface Mod {
+    String value();
+}
+""")
+
+            def bridgePkgDir = new File(dir, "com/mtrmap/bridge")
+            bridgePkgDir.mkdirs()
+            write(new File(bridgePkgDir, "BridgeMod.java"), """package com.mtrmap.bridge;
+
+import ${bridgeModPackage}.Mod;
+
+@Mod("${bridgeId}")
+public class BridgeMod {
+    public BridgeMod() {
+    }
+}
+""")
+        }
+    }
+
+    tasks.register("compileBridgeMod", JavaCompile) {
+        group = "versioned"
+        description = "编译外壳用的最小 @Mod 桥接类"
+        dependsOn tasks.named("generateBridgeSource")
+        source bridgeSrcDir
+        classpath = files()
+        destinationDirectory = bridgeClassesDir
+    }
+
+    tasks.register("universalJar", Jar) {
+        group = "versioned"
+        description = "把当前 MC 版本两个加载器的 jar 合并成双加载器通用 jar"
+        dependsOn tasks.named("generateBridgeMeta")
+        dependsOn tasks.named("compileBridgeMod")
+        // 外壳的 @Mod 桥接类：只取桥接类本身，为编译而生成的桩注解不进 jar
+        from(bridgeClassesDir) {
+            include "com/mtrmap/bridge/BridgeMod.class"
+        }
+        // 内嵌两个真实 jar（保持原名，元数据里按同名路径引用）
+        bridgePlatformPaths.each { path ->
+            dependsOn "${path}:remapJar"
+            from(project.provider { rootProject.project(path).tasks.named("remapJar").get().archiveFile }) {
+                into "META-INF/jars"
+            }
+        }
+        from(bridgeDir)
+        archiveFileName = "${archArtifact}-${modVersion}-${mc}-universal.jar"
+        destinationDirectory = rootProject.layout.buildDirectory.dir("libs/${modVersion}/${mc}/universal")
+        preserveFileTimestamps = false
+        reproducibleFileOrder = true
+    }
+}

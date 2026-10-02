@@ -1,0 +1,12 @@
+{
+  "required": false,
+  "package": "com.mtrmap.mixin.xaero",
+  "compatibilityLevel": "JAVA_17",
+  "plugin": "com.mtrmap.mixin.XaeroMixinPlugin",
+  "client": [
+    "WorldMapOverlayMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

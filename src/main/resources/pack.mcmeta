@@ -1,0 +1,6 @@
+{
+  "pack": {
+    "description": "mtrmap resources",
+    "pack_format": ${packFormat}
+  }
+}

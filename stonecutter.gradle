@@ -1,0 +1,9 @@
+plugins {
+    id "dev.kikugie.stonecutter"
+    id "dev.architectury.loom" version "1.7.418" apply false
+    id "architectury-plugin" version "3.4.164" apply false
+    id "com.github.johnrengelman.shadow" version "8.1.1" apply false
+}
+
+// 当前"激活"的版本；源码里的 //? if 注释按这个版本切换状态
+stonecutter.active("1.20.1")

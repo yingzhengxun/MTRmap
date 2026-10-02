@@ -1,0 +1,33 @@
+pluginManagement {
+    repositories {
+        maven { url = "https://maven.fabricmc.net/" }
+        maven { url = "https://maven.architectury.dev/" }
+        maven { url = "https://maven.minecraftforge.net/" }
+        maven { url = "https://maven.neoforged.net/releases/" }
+        maven { url = "https://maven.kikugie.dev/snapshots" }
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    id "dev.kikugie.stonecutter" version "0.7.11"
+}
+
+stonecutter {
+    // Groovy DSL（项目其余脚本都是 Groovy）
+    kotlinController = false
+    centralScript = "build.gradle"
+
+    create(rootProject) {
+        // 根节点的 src/ 就是 common；每个 MC 版本一个节点（版本差异用 //? if 注释处理）
+        versions "1.16.5", "1.18.2", "1.19.2", "1.20.1", "1.21.1"
+
+        // 加载器分支
+        branch "fabric"
+        branch("forge") { b -> b.versions("1.16.5", "1.18.2", "1.19.2", "1.20.1") } // 1.21.1 没有 legacy Forge 版 MTR
+        branch("neoforge") { b -> b.versions("1.21.1") }
+    }
+}
+
+rootProject.name = "mtrmap"

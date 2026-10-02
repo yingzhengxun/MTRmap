@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "${id}",
+  "version": "${version}",
+  "name": "${name}",
+  "description": "通过 localhost:1145 显示 Minecraft Transit Railway 的线路地图，包含车站、线路、车厂与玩家位置。",
+  "authors": [
+    "MTR Map Team"
+  ],
+  "license": "Apache-2.0",
+  "icon": "assets/mtrmap/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.mtrmap.fabric.MtrMapFabric"
+    ],
+    "client": [
+      "com.mtrmap.fabric.MtrMapFabricClient"
+    ]
+  },
+  "mixins": [
+    "mtrmap.mixins.json",
+    "mtrmap.xaero.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.15.11",
+    "minecraft": "${minecraft}",
+    "java": ">=${java_compat}",
+    "fabric": "*",
+    "mtr": "${mtr}"
+  },
+  "suggests": {
+    "xaeroworldmap": "*"
+  }
+}
