@@ -129,10 +129,12 @@ tasks.register("buildAndCollect", Copy) {
 // 平台专属的加载器名：1.16.5 / 1.18.2 / 1.19.2 / 1.20.1 是 fabric + forge，1.21.1 是 fabric + neoforge
 def bridgePlatformPaths = platforms.collect { loader -> ":${loader}:${mc}" }
         .findAll { path -> rootProject.findProject(path) != null }
-// 1.16.5 例外：Forge 36.x 没有 JarJar，"外壳 + 内嵌" 的通用 jar 在 Forge 端加载不了，
-// 所以这个版本不走通用 jar，直接输出 fabric / forge 两个独立 jar
-// （两个平台脚本各自的 buildAndCollect 会分别收进 build/libs/<mod>/<mc>/<loader>）。
-def supportsUniversalJar = mc != "1.16.5"
+// 1.16.5 与 1.17.1 例外：这两个版本的 Forge（36.x / 37.x）都还没有 JarJar，
+// 「外壳 + 内嵌」的通用 jar 在 Forge 端加载不了，所以不走通用 jar，直接输出
+// fabric / forge 两个独立 jar（两个平台脚本各自的 buildAndCollect 会分别收进
+// build/libs/<mod>/<mc>/<loader>）。
+// JarJar 是 Forge 1.18.2（40.x）才引入的，故 1.18.2 及以后的版本仍用通用 jar。
+def supportsUniversalJar = !(mc in ["1.16.5", "1.17.1"])
 // 只在版本节点（:1.20.1 这种）上生成，根项目本身不生成
 if (supportsUniversalJar && bridgePlatformPaths.size() >= 2 && project.path == ":${mc}") {
     def archGroup = property("mod.group").toString()
