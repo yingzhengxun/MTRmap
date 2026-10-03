@@ -1,13 +1,19 @@
 package com.mtrmap.forge;
 
 import com.mtrmap.MtrMapCommon;
-// 1.17 起 Forge 的网络类搬到了 net.minecraftforge.network 包；
-// 1.16.5 还在老的 net.minecraftforge.fml.network 下。
-//? if >=1.17 {
+// Forge 的网络包路径分三代：
+//   1.18.2+  net.minecraftforge.network
+//   1.17.1   net.minecraftforge.fmllegacy.network（1.19 之前的过渡包）
+//   1.16.5   net.minecraftforge.fml.network
+//? if >=1.18.2 {
 import net.minecraftforge.network.NetworkDirection;
 import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.simple.SimpleChannel;
-//?} else {
+//?} else if >=1.17 {
+/*import net.minecraftforge.fmllegacy.network.NetworkDirection;
+import net.minecraftforge.fmllegacy.network.NetworkRegistry;
+import net.minecraftforge.fmllegacy.network.simple.SimpleChannel;
+*///?} else {
 /*import net.minecraftforge.fml.network.NetworkDirection;
 import net.minecraftforge.fml.network.NetworkRegistry;
 import net.minecraftforge.fml.network.simple.SimpleChannel;
@@ -23,7 +29,7 @@ public final class ForgeNetwork {
 
     private static final String PROTOCOL_VERSION = "1";
 
-    //? if >=1.17 {
+    //? if >=1.18.2 {
     private static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
             .named(MtrMapCommon.AVATAR_CHANNEL)
             .networkProtocolVersion(() -> PROTOCOL_VERSION)
@@ -31,7 +37,7 @@ public final class ForgeNetwork {
             .serverAcceptedVersions(PROTOCOL_VERSION::equals)
             .simpleChannel();
     //?} else {
-    /*// 1.16.5 还没有 ChannelBuilder，用工厂方法直接建通道
+    /*// 1.17.1 与 1.16.5 都还没有 ChannelBuilder，用工厂方法直接建通道
     private static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             MtrMapCommon.AVATAR_CHANNEL,
             () -> PROTOCOL_VERSION,

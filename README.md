@@ -9,6 +9,7 @@
 | Minecraft | 加载器 | 通用 jar |
 | --- | --- | --- |
 | 1.16.5 | Fabric / Forge | 无（单独输出 fabric、forge 两个 jar） |
+| 1.17.1 | Fabric / Forge | `mtrmap-<版本>-1.17.1-universal.jar` |
 | 1.18.2 | Fabric / Forge | `mtrmap-<版本>-1.18.2-universal.jar` |
 | 1.19.2 | Fabric / Forge | `mtrmap-<版本>-1.19.2-universal.jar` |
 | 1.20.1 | Fabric / Forge | `mtrmap-<版本>-1.20.1-universal.jar` |
@@ -18,7 +19,7 @@
 
 > 1.16.5 是例外：Forge 36.x 没有 JarJar，「外壳 + 内嵌」的通用 jar 在 Forge 端加载不了，因此该版本改为输出两个独立 jar（`mtrmap-fabric-<版本>.jar` 与 `mtrmap-forge-<版本>.jar`），按加载器分别安装。
 
-> 1.21.1 没有 legacy Forge 分支，因为 MTR 在该版本只提供 Fabric / NeoForge 版。1.16.5 与 1.18.2 对接 MTR 3.x。
+> 1.21.1 没有 legacy Forge 分支，因为 MTR 在该版本只提供 Fabric / NeoForge 版。1.16.5、1.17.1 与 1.18.2 对接 MTR 3.x。
 
 ## 功能
 
@@ -94,7 +95,7 @@
 只构建通用 jar 与 1.16.5 的两个独立 jar，一条命令完成：
 
 ```bat
-.\gradlew.bat :1.18.2:universalJar :1.19.2:universalJar :1.20.1:universalJar :1.21.1:universalJar :fabric:1.16.5:buildAndCollect :forge:1.16.5:buildAndCollect
+.\gradlew.bat :1.17.1:universalJar :1.18.2:universalJar :1.19.2:universalJar :1.20.1:universalJar :1.21.1:universalJar :fabric:1.16.5:buildAndCollect :forge:1.16.5:buildAndCollect
 ```
 
 产物位于 `build/libs/<模组版本>/<MC 版本>/universal/`（1.16.5 则分别在 `.../1.16.5/fabric/` 与 `.../1.16.5/forge/`）。
@@ -155,6 +156,7 @@ Displays the Minecraft Transit Railway (MTR) network on `localhost:1145`, includ
 | Minecraft | Loaders | Universal jar |
 | --- | --- | --- |
 | 1.16.5 | Fabric / Forge | None (two standalone jars instead) |
+| 1.17.1 | Fabric / Forge | `mtrmap-<version>-1.17.1-universal.jar` |
 | 1.18.2 | Fabric / Forge | `mtrmap-<version>-1.18.2-universal.jar` |
 | 1.19.2 | Fabric / Forge | `mtrmap-<version>-1.19.2-universal.jar` |
 | 1.20.1 | Fabric / Forge | `mtrmap-<version>-1.20.1-universal.jar` |
@@ -164,7 +166,7 @@ Each Minecraft version ships a single `universal` jar that loads directly on bot
 
 > 1.16.5 is the exception: Forge 36.x has no JarJar, so a "shell + embedded jars" universal jar cannot load on Forge. That version therefore ships two standalone jars (`mtrmap-fabric-<version>.jar` and `mtrmap-forge-<version>.jar`) to be installed per loader.
 
-> There is no legacy Forge branch for 1.21.1, because MTR only provides Fabric / NeoForge builds for that version. 1.16.5 and 1.18.2 target MTR 3.x.
+> There is no legacy Forge branch for 1.21.1, because MTR only provides Fabric / NeoForge builds for that version. 1.16.5, 1.17.1 and 1.18.2 target MTR 3.x.
 
 ### Features
 
@@ -240,7 +242,7 @@ Trip records are persisted to `mods/mapconfig/mtrmap_trips.json` (archived per p
 Build the universal jars plus the two standalone 1.16.5 jars with a single command:
 
 ```bat
-.\gradlew.bat :1.18.2:universalJar :1.19.2:universalJar :1.20.1:universalJar :1.21.1:universalJar :fabric:1.16.5:buildAndCollect :forge:1.16.5:buildAndCollect
+.\gradlew.bat :1.17.1:universalJar :1.18.2:universalJar :1.19.2:universalJar :1.20.1:universalJar :1.21.1:universalJar :fabric:1.16.5:buildAndCollect :forge:1.16.5:buildAndCollect
 ```
 
 Output lands in `build/libs/<mod version>/<MC version>/universal/` (for 1.16.5, under `.../1.16.5/fabric/` and `.../1.16.5/forge/`).

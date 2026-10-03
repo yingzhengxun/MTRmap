@@ -21,11 +21,11 @@ stonecutter {
 
     create(rootProject) {
         // 根节点的 src/ 就是 common；每个 MC 版本一个节点（版本差异用 //? if 注释处理）
-        versions "1.16.5", "1.18.2", "1.19.2", "1.20.1", "1.21.1"
+        versions "1.16.5", "1.17.1", "1.18.2", "1.19.2", "1.20.1", "1.21.1"
 
         // 加载器分支
         branch "fabric"
-        branch("forge") { b -> b.versions("1.16.5", "1.18.2", "1.19.2", "1.20.1") } // 1.21.1 没有 legacy Forge 版 MTR
+        branch("forge") { b -> b.versions("1.16.5", "1.17.1", "1.18.2", "1.19.2", "1.20.1") } // 1.21.1 没有 legacy Forge 版 MTR
         branch("neoforge") { b -> b.versions("1.21.1") }
     }
 }

@@ -5,12 +5,18 @@ import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+// 服务器生命周期事件的包路径分三代：
+//   1.18.2+  net.minecraftforge.event.server
+//   1.17.1   net.minecraftforge.fmlserverevents（1.19 之前的过渡包）
+//   1.16.5   net.minecraftforge.fml.event.server
 //? if >=1.18.2 {
 import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
-//?} else {
-/*// 1.16.5（Forge 36.x）还没有 event.server 包，服务器生命周期事件挂在 fml.event.server 下
-import net.minecraftforge.fml.event.server.FMLServerStartedEvent;
+//?} else if >=1.17 {
+/*import net.minecraftforge.fmlserverevents.FMLServerStartedEvent;
+import net.minecraftforge.fmlserverevents.FMLServerStoppingEvent;
+*///?} else {
+/*import net.minecraftforge.fml.event.server.FMLServerStartedEvent;
 import net.minecraftforge.fml.event.server.FMLServerStoppingEvent;
 *///?}
 
@@ -49,12 +55,17 @@ public final class ForgeEventHandler {
     @SubscribeEvent
     public static void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase == TickEvent.Phase.END) {
-            // ServerTickEvent.getServer() 是 1.19 才加的；1.18.2 与 1.16.5 只能从
-            // ServerLifecycleHooks 取，且该类在 1.17 从 fml.server 搬到了 server 包。
+            // ServerTickEvent.getServer() 是 1.19 才加的；1.18.2 / 1.17.1 / 1.16.5 只能从
+            // ServerLifecycleHooks 取，且该类的包路径换过两次：
+            //   1.18.2+  net.minecraftforge.server
+            //   1.17.1   net.minecraftforge.fmllegacy.server
+            //   1.16.5   net.minecraftforge.fml.server
             //? if >=1.19 {
             MtrMapCommon.onServerTick(event.getServer());
             //?} else if >=1.18.2 {
             /*MtrMapCommon.onServerTick(net.minecraftforge.server.ServerLifecycleHooks.getCurrentServer());
+            *///?} else if >=1.17 {
+            /*MtrMapCommon.onServerTick(net.minecraftforge.fmllegacy.server.ServerLifecycleHooks.getCurrentServer());
             *///?} else {
             /*MtrMapCommon.onServerTick(net.minecraftforge.fml.server.ServerLifecycleHooks.getCurrentServer());
             *///?}
