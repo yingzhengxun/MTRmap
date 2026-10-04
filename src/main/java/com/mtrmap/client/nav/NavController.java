@@ -128,7 +128,7 @@ public final class NavController {
     }
 
     private static JsonObject fetchTask(String uuid) throws Exception {
-        int port = MtrMapConfig.getPort();
+        int port = MtrMapConfig.getActivePort();
         HttpURLConnection conn = (HttpURLConnection) new URL(
                 "http://127.0.0.1:" + port + "/api/nav?uuid=" + uuid).openConnection();
         try {
@@ -261,7 +261,7 @@ public final class NavController {
 
     private static void postJson(String uuid, String json) {
         try {
-            int port = MtrMapConfig.getPort();
+            int port = MtrMapConfig.getActivePort();
             HttpURLConnection conn = (HttpURLConnection) new URL(
                     "http://127.0.0.1:" + port + "/api/trips").openConnection();
             try {

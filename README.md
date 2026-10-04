@@ -2,7 +2,7 @@
 
 [English](#english) | 中文
 
-通过 `localhost:1145` 显示 Minecraft Transit Railway（MTR）的线路地图，包含车站、线路、车厂与玩家位置，并提供网页端路径查询、实时导航下发与行程记录。
+通过 `localhost:1145` 显示 Minecraft Transit Railway（MTR）的线路地图，包含车站、线路、车厂与玩家位置，并提供网页端车站/线路搜索与详情侧边栏、路径查询、实时导航下发与行程记录。
 
 ## 支持的版本与加载器
 
@@ -56,7 +56,7 @@
 | 字段 | 说明 |
 | --- | --- |
 | `showDepots` | 是否显示车厂 |
-| `port` | HTTP 服务端口，默认 `1145` |
+| `port` | HTTP 服务端口，默认 `1145`。被占用时自动往后顺延到第一个可用端口，并在玩家进游戏时于消息栏提示实际端口 |
 | `xaeroOverlay` | 是否在 Xaero 世界地图上叠加 MTR 线网 |
 
 行程记录落盘在 `mods/mapconfig/mtrmap_trips.json`（按玩家 UUID 归档，网页端展示与删除）。
@@ -143,7 +143,7 @@ Apache-2.0
 
 ## English
 
-Displays the Minecraft Transit Railway (MTR) network on `localhost:1145`, including stations, lines, depots and player positions, plus a web-based route planner, in-game navigation dispatch and trip history.
+Displays the Minecraft Transit Railway (MTR) network on `localhost:1145`, including stations, lines, depots and player positions, plus a web-based station/line search with a detail sidebar, route planner, in-game navigation dispatch and trip history.
 
 ### Supported Versions & Loaders
 
@@ -197,7 +197,7 @@ The config file lives at `mods/mapconfig/mtrmap.json` and is created automatical
 | Field | Description |
 | --- | --- |
 | `showDepots` | Whether to display depots |
-| `port` | HTTP server port, defaults to `1145` |
+| `port` | HTTP server port, defaults to `1145`. If it is taken, the server shifts to the next free port and notifies players in chat with the actual port |
 | `xaeroOverlay` | Whether to overlay the MTR network on the Xaero world map |
 
 Trip records are persisted to `mods/mapconfig/mtrmap_trips.json` (archived per player UUID; shown and deletable from the web map).

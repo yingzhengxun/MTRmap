@@ -271,6 +271,22 @@ public class MapDataCollector {
 			segmentsByRoute.put(route.id(), segs);
 		}
 
+		// 线路 -> 发车间隔（分钟）：由服务该线路的车厂时刻表推算，取最频繁的那个车厂。
+		// 网页的线路信息侧边栏用它显示「约几分钟一班」。
+		Map<Long, Integer> routeHeadway = new HashMap<>();
+		for (DepotInfo depot : depots) {
+			int headway = depot.headwayMinutes();
+			if (headway <= 0) {
+				continue;
+			}
+			for (long routeId : depot.routeIds()) {
+				Integer prev = routeHeadway.get(routeId);
+				if (prev == null || headway < prev) {
+					routeHeadway.put(routeId, headway);
+				}
+			}
+		}
+
 		// 第二遍：按组合并输出为单线
 		JsonArray routesArray = new JsonArray();
 		for (Map.Entry<String, List<RouteInfo>> group : routeGroups.entrySet()) {
@@ -295,6 +311,16 @@ public class MapDataCollector {
 			obj.addProperty("id", first.id());
 			obj.addProperty("name", group.getKey());
 			obj.addProperty("color", first.color());
+
+			// 发车间隔（分钟），0 表示没配车厂时刻表、无法推算
+			int headway = 0;
+			for (RouteInfo r : groupRoutes) {
+				Integer h = routeHeadway.get(r.id());
+				if (h != null && (headway == 0 || h < headway)) {
+					headway = h;
+				}
+			}
+			obj.addProperty("headway", headway);
 
 			JsonArray stationIds = new JsonArray();
 			for (Long sid : mergedIds) {

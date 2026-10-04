@@ -161,7 +161,7 @@ public final class OverlayData {
 	}
 
 	private static Snapshot fetch() throws Exception {
-		int port = MtrMapConfig.getPort();
+		int port = MtrMapConfig.getActivePort();
 		HttpURLConnection conn = (HttpURLConnection) new URL("http://127.0.0.1:" + port + "/api/overlay").openConnection();
 		try {
 			conn.setConnectTimeout(TIMEOUT_MS);

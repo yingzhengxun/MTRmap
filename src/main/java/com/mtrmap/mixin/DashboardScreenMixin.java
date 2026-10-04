@@ -53,7 +53,7 @@ public class DashboardScreenMixin {
 		if (!isDashboardScreen(this)) {
 			return;
 		}
-		int port = MtrMapConfig.getPort();
+		int port = MtrMapConfig.getActivePort();
 		Button.OnPress onPress = button -> {
 			try {
 				Util.getPlatform().openUri(new URI("http://localhost:" + port));

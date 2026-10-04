@@ -109,16 +109,140 @@ html, body {
 	cursor: grabbing;
 }
 
-#infoPanel {
+/* 左上角竖向堆叠：搜索框 → 用户卡片 → 状态图例 */
+#leftStack {
 	position: absolute;
 	top: 10px;
 	left: 10px;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 8px;
+	z-index: 60;
+	max-width: 300px;
+}
+
+/* ===== 左上角搜索框 ===== */
+#searchBox {
+	position: relative;
+	width: 280px;
+	max-width: 100%;
+	padding: 6px;
+	border-radius: 8px;
+	border: 1px solid var(--border-color);
+	background: var(--panel-bg);
+	transition: background 0.3s, border-color 0.3s;
+}
+
+.search-row {
+	display: flex;
+	gap: 6px;
+}
+
+#searchType {
+	flex: 0 0 auto;
+	height: 28px;
+	padding: 0 4px;
+	border-radius: 6px;
+	border: 1px solid var(--border-color);
+	background: var(--button-bg);
+	color: var(--button-color);
+	font-size: 12px;
+	cursor: pointer;
+	transition: background 0.2s, color 0.3s, border-color 0.3s;
+}
+
+#searchType:hover {
+	background: var(--button-hover);
+}
+
+#searchInput {
+	flex: 1 1 auto;
+	min-width: 0;
+	height: 28px;
+	padding: 0 8px;
+	border-radius: 6px;
+	border: 1px solid var(--border-color);
+	background: var(--button-bg);
+	color: var(--text-color);
+	font-size: 12px;
+	outline: none;
+	transition: background 0.2s, color 0.3s, border-color 0.3s;
+}
+
+#searchInput:focus {
+	border-color: var(--route-active-border);
+}
+
+#searchResults {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 100%;
+	margin-top: 4px;
+	max-height: 260px;
+	overflow-y: auto;
+	border-radius: 8px;
+	border: 1px solid var(--border-color);
+	background: var(--panel-bg);
+	box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+	transition: background 0.3s, border-color 0.3s;
+}
+
+.search-item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 10px;
+	font-size: 12px;
+	color: var(--text-color);
+	cursor: pointer;
+	transition: background 0.2s, color 0.3s;
+}
+
+.search-item:hover,
+.search-item.active {
+	background: var(--button-hover);
+}
+
+.search-item-dot {
+	flex: 0 0 auto;
+	width: 10px;
+	height: 10px;
+	border-radius: 3px;
+}
+
+.search-item-name {
+	flex: 1 1 auto;
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.search-item-sub {
+	flex: 0 0 auto;
+	font-size: 11px;
+	color: var(--label-color);
+	transition: color 0.3s;
+}
+
+.search-empty {
+	padding: 10px;
+	text-align: center;
+	font-size: 12px;
+	color: var(--label-color);
+	transition: color 0.3s;
+}
+
+#infoPanel {
+	position: static;
+	max-width: 100%;
 	background: var(--panel-bg);
 	padding: 12px 16px;
 	border-radius: 8px;
 	border: 1px solid var(--border-color);
 	font-size: 13px;
-	max-width: 300px;
 	transition: background 0.3s, border-color 0.3s;
 }
 
@@ -828,16 +952,9 @@ body.route-mode #controls {
 
 /* ===== 左上角用户卡片（头像 + 用户名）===== */
 #userCard {
-	position: absolute;
-	top: 10px;
-	left: 10px;
-	z-index: 60;
+	position: relative;
+	align-self: flex-start;
 	font-size: 13px;
-}
-
-/* 用户卡片出现时，把下面的状态面板往下让开 */
-body.has-user #infoPanel {
-	top: 62px;
 }
 
 .user-card-main {
@@ -1092,4 +1209,197 @@ body.has-user #infoPanel {
 	border: 1px solid var(--border-color);
 	font-size: 13px;
 	cursor: pointer;
+}
+
+/* ===== 右侧详情侧边栏（车站 / 线路）===== */
+#detailPanel {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	width: 300px;
+	max-height: calc(100% - 20px);
+	display: flex;
+	flex-direction: column;
+	border-radius: 10px;
+	border: 1px solid var(--border-color);
+	background: var(--panel-bg);
+	padding: 10px 12px 12px;
+	box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+	z-index: 55;
+	font-size: 13px;
+	transition: background 0.3s, border-color 0.3s;
+}
+
+/* 路径面板也在右侧时，详情面板让到它左边 */
+body.route-mode #detailPanel {
+	right: 330px;
+}
+
+#detailTitle {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-size: 19px;
+	font-weight: bold;
+	line-height: 1.25;
+	color: var(--tt-title-color);
+	word-break: break-word;
+	transition: color 0.3s;
+}
+
+.detail-head-actions {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.detail-lang-btn {
+	height: 24px;
+	padding: 0 8px;
+	border-radius: 6px;
+	border: 1px solid var(--border-color);
+	background: transparent;
+	color: var(--button-color);
+	font-size: 12px;
+	cursor: pointer;
+	transition: background 0.2s, color 0.3s, border-color 0.3s;
+}
+
+.detail-lang-btn:hover {
+	background: var(--button-hover);
+}
+
+.detail-subtitle {
+	margin-top: 2px;
+	font-size: 12px;
+	color: var(--label-color);
+	transition: color 0.3s;
+}
+
+#detailBody {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	margin-top: 8px;
+	overflow-y: auto;
+}
+
+.detail-row {
+	display: flex;
+	gap: 8px;
+	padding: 3px 0;
+	font-size: 12px;
+	color: var(--text-color);
+	transition: color 0.3s;
+}
+
+.detail-label {
+	flex: 0 0 auto;
+	color: var(--label-color);
+	transition: color 0.3s;
+}
+
+.detail-line-tags {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	padding: 4px 0;
+}
+
+.detail-line-tag {
+	padding: 2px 8px;
+	border-radius: 10px;
+	border: 1px solid var(--border-color);
+	font-size: 11px;
+	cursor: pointer;
+	transition: background 0.2s;
+}
+
+.detail-line-tag:hover {
+	background: var(--button-hover);
+}
+
+/* 「约几分钟一班」 */
+.detail-headway {
+	margin: 8px 0 4px;
+	padding: 6px 8px;
+	border-radius: 6px;
+	background: var(--route-card-bg);
+	font-size: 12px;
+	color: var(--text-color);
+	transition: background 0.3s, color 0.3s;
+}
+
+/* 途经车站列表：左侧标志色竖线，线上一个表示站点的圆，右侧横写站名 */
+.detail-stations {
+	display: flex;
+	flex-direction: column;
+	padding: 2px 0;
+}
+
+.detail-station {
+	position: relative;
+	display: flex;
+	align-items: center;
+	min-height: 28px;
+	padding-left: 26px;
+	font-size: 12px;
+	color: var(--text-color);
+	transition: color 0.3s;
+}
+
+.detail-station::before {
+	content: '';
+	position: absolute;
+	left: 9px;
+	top: 0;
+	bottom: 0;
+	width: 4px;
+	border-radius: 2px;
+	background: var(--st-line, var(--border-color));
+}
+
+.detail-station:first-child::before {
+	top: 50%;
+}
+
+.detail-station:last-child::before {
+	bottom: 50%;
+}
+
+.detail-station-dot {
+	position: absolute;
+	left: 5px;
+	top: 50%;
+	transform: translateY(-50%);
+	width: 12px;
+	height: 12px;
+	border-radius: 50%;
+	box-sizing: border-box;
+	border: 3px solid var(--st-line, var(--border-color));
+	background: var(--route-node-bg);
+}
+
+/* 换乘站在线上画成胶囊，和地图上的标记一致 */
+.detail-station.interchange .detail-station-dot {
+	left: 3px;
+	width: 16px;
+	height: 10px;
+	border-radius: 5px;
+}
+
+.detail-station-name {
+	flex: 1 1 auto;
+	min-width: 0;
+	word-break: break-word;
+}
+
+.detail-footer {
+	margin-top: 10px;
+	padding-top: 8px;
+	border-top: 1px solid var(--border-color);
+	font-size: 12px;
+	color: var(--text-color);
+	transition: color 0.3s, border-color 0.3s;
 }

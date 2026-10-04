@@ -9,20 +9,32 @@
 <body>
 	<div id="app">
 		<canvas id="mapCanvas"></canvas>
-		<div id="infoPanel">
-			<div id="status">正在加载...</div>
-			<div id="legend"></div>
+		<div id="leftStack">
+			<div id="searchBox">
+				<div class="search-row">
+					<select id="searchType" title="车站 / 线路">
+						<option value="station">车站</option>
+						<option value="route">线路</option>
+					</select>
+					<input id="searchInput" type="text" autocomplete="off" spellcheck="false" placeholder="搜索车站">
+				</div>
+				<div id="searchResults" style="display:none"></div>
+			</div>
+			<div id="userCard" style="display:none">
+				<div class="user-card-main" id="userCardMain">
+					<img id="userAvatar" alt="">
+					<span id="userName"></span>
+				</div>
+				<div class="user-menu" id="userMenu" style="display:none">
+					<button id="userTripsBtn">行程记录</button>
+				</div>
+			</div>
+			<div id="infoPanel">
+				<div id="status">正在加载...</div>
+				<div id="legend"></div>
+			</div>
 		</div>
 		<div id="tooltip"></div>
-		<div id="userCard" style="display:none">
-			<div class="user-card-main" id="userCardMain">
-				<img id="userAvatar" alt="">
-				<span id="userName"></span>
-			</div>
-			<div class="user-menu" id="userMenu" style="display:none">
-				<button id="userTripsBtn">行程记录</button>
-			</div>
-		</div>
 		<div id="routePanel" style="display:none">
 			<div class="route-panel-head">
 				<div class="route-panel-title" id="routePanelTitle">路径查询</div>
@@ -38,6 +50,16 @@
 			</div>
 			<div class="route-tabs" id="routeTabs"></div>
 			<div class="route-detail" id="routeDetail"></div>
+		</div>
+		<div id="detailPanel" style="display:none">
+			<div class="route-panel-head">
+				<div id="detailTitle"></div>
+				<div class="detail-head-actions">
+					<button class="detail-lang-btn" id="detailLangBtn">EN</button>
+					<button class="route-close" id="detailCloseBtn" title="关闭">×</button>
+				</div>
+			</div>
+			<div id="detailBody"></div>
 		</div>
 		<div id="controls">
 			<button id="controlsToggle" title="展开/折叠工具栏">▾</button>

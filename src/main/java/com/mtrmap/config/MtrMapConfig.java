@@ -28,6 +28,8 @@ public class MtrMapConfig {
 	}
 
 	private static ConfigData data = new ConfigData();
+	/** 实际绑定成功的端口，0 表示服务器还没启动 */
+	private static int activePort = 0;
 
 	public static boolean isShowDepots() {
 		return data.showDepots;
@@ -37,9 +39,25 @@ public class MtrMapConfig {
 		data.showDepots = value;
 	}
 
-	/** HTTP 服务器端口（默认 1145） */
+	/** HTTP 服务器端口（默认 1145），即配置文件里填的端口 */
 	public static int getPort() {
 		return data.port;
+	}
+
+	/**
+	 * 服务器当前实际监听的端口。
+	 *
+	 * <p>配置端口被占用时会自动往后顺延，此时本值才是真正可用的端口；
+	 * 服务器尚未启动（或未发生顺延）时就是配置端口。
+	 * 客户端轮询 / 打开网页都必须用它，不能用 {@link #getPort()}。
+	 */
+	public static int getActivePort() {
+		return activePort > 0 ? activePort : data.port;
+	}
+
+	/** 记录实际绑定成功的端口（0 表示还没启动） */
+	public static void setActivePort(int port) {
+		activePort = port;
 	}
 
 	/**

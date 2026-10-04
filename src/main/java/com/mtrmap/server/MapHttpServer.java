@@ -52,10 +52,42 @@ public class MapHttpServer {
 		MIME_TYPES.put("json", "application/json; charset=UTF-8");
 	}
 
-	public static void start(int port, MinecraftServer mcServer) throws IOException {
-		minecraftServer = mcServer;
-		server = HttpServer.create(new InetSocketAddress(port), 0);
+	/** 端口被占用时最多往后顺延多少个端口 */
+	private static final int MAX_PORT_ATTEMPTS = 64;
 
+	/**
+	 * 启动 HTTP 服务器。
+	 *
+	 * <p>配置端口被别的程序（或上一次没退干净的实例）占用时，自动往后顺延到第一个
+	 * 可用端口，避免整个地图服务起不来。返回实际绑定成功的端口。
+	 */
+	public static int start(int preferredPort, MinecraftServer mcServer) throws IOException {
+		minecraftServer = mcServer;
+		IOException lastError = null;
+		for (int attempt = 0; attempt < MAX_PORT_ATTEMPTS; attempt++) {
+			int port = preferredPort + attempt;
+			if (port > 65535) {
+				break;
+			}
+			HttpServer created;
+			try {
+				created = HttpServer.create(new InetSocketAddress(port), 0);
+			} catch (IOException e) {
+				// 端口被占用：试下一个
+				lastError = e;
+				continue;
+			}
+			server = created;
+			registerContexts();
+			server.setExecutor(Executors.newCachedThreadPool());
+			server.start();
+			return port;
+		}
+		throw lastError != null ? lastError : new IOException("没有可用端口");
+	}
+
+	/** 注册全部静态资源与 API 端点 */
+	private static void registerContexts() {
 		// 静态文件
 		server.createContext("/", new StaticFileHandler("/assets/mtrmap/web/index.html", "html"));
 		server.createContext("/style.css", new StaticFileHandler("/assets/mtrmap/web/style.css", "css"));
@@ -216,9 +248,6 @@ public class MapHttpServer {
 			}
 			exchange.close();
 		});
-
-		server.setExecutor(Executors.newCachedThreadPool());
-		server.start();
 	}
 
 	public static void stop() {

@@ -172,9 +172,11 @@ public final class MtrNetwork {
 		private final int maxZ;
 		private final BlockPos center;
 		private final List<Long> routeIds;
+		private final int headwayMinutes;
 
 		public DepotInfo(long id, String name, int color,
-						int minX, int minZ, int maxX, int maxZ, BlockPos center, List<Long> routeIds) {
+						int minX, int minZ, int maxX, int maxZ, BlockPos center, List<Long> routeIds,
+						int headwayMinutes) {
 			this.id = id;
 			this.name = name;
 			this.color = color;
@@ -184,6 +186,7 @@ public final class MtrNetwork {
 			this.maxZ = maxZ;
 			this.center = center;
 			this.routeIds = routeIds;
+			this.headwayMinutes = headwayMinutes;
 		}
 
 		public long id() {
@@ -220,6 +223,14 @@ public final class MtrNetwork {
 
 		public List<Long> routeIds() {
 			return routeIds;
+		}
+
+		/**
+		 * 该车厂发车间隔（分钟），按车厂时刻表（MTR 的班次频率）推算；
+		 * 无法推算时为 0。同一线路可能被多个车厂服务，取最频繁的那个。
+		 */
+		public int headwayMinutes() {
+			return headwayMinutes;
 		}
 	}
 
@@ -565,9 +576,23 @@ public final class MtrNetwork {
 					routeIds.add(routeId);
 				}
 				out.add(new DepotInfo(depot.getId(), depot.getName(), depot.getColor(),
-						minX, minZ, maxX, maxZ, center, routeIds));
+						minX, minZ, maxX, maxZ, center, routeIds, headwayMinutes(depot)));
 			}
 			return out;
+		}
+
+		// 车厂发车间隔（分钟）。
+		// MTR 4.x 生成时刻表时用的间隔是 FREQUENCY_BASE_MILLIS(4 小时) / 该小时的班次数，
+		// 取一天里最频繁的那个小时作为「约几分钟一班」；频率全为 0（没配时刻表）时返回 0。
+		private static int headwayMinutes(Depot depot) {
+			long maxFrequency = 0;
+			for (int hour = 0; hour < 24; hour++) {
+				maxFrequency = Math.max(maxFrequency, depot.getFrequency(hour));
+			}
+			if (maxFrequency <= 0) {
+				return 0;
+			}
+			return Math.max(1, (int) Math.round(14400000.0 / maxFrequency / 60000.0));
 		}
 
 		// 角点无效时 getMinX 之类的返回值不可信
@@ -823,9 +848,26 @@ public final class MtrNetwork {
 				List<Long> routeIds = depot.routeIds == null
 						? Collections.<Long>emptyList() : new ArrayList<>(depot.routeIds);
 				out.add(new DepotInfo(depot.id, depot.name, depot.color,
-						minX, minZ, maxX, maxZ, center, routeIds));
+						minX, minZ, maxX, maxZ, center, routeIds, headwayMinutes(depot)));
 			}
 			return out;
+		}
+
+		/**
+		 * 车厂发车间隔（分钟）。
+		 *
+		 * <p>MTR 3.x 生成时刻表时用的间隔是 {@code 200000 / 该小时的班次数}（毫秒），
+		 * 取一天里最频繁的那个小时作为「约几分钟一班」；频率全为 0（没配时刻表）时返回 0。
+		 */
+		private static int headwayMinutes(Depot depot) {
+			int maxFrequency = 0;
+			for (int hour = 0; hour < 24; hour++) {
+				maxFrequency = Math.max(maxFrequency, depot.getFrequency(hour));
+			}
+			if (maxFrequency <= 0) {
+				return 0;
+			}
+			return Math.max(1, (int) Math.round(200000.0 / maxFrequency / 60000.0));
 		}
 
 		/**

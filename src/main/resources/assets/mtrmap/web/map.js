@@ -114,6 +114,20 @@
 			ticket_time: '用时',
 			ticket_transfers: '换乘',
 			ticket_footer: 'MTR Map · 旅途纪念',
+			// 搜索 / 侧边栏
+			search_type_station: '车站',
+			search_type_route: '线路',
+			search_placeholder_station: '搜索车站',
+			search_placeholder_route: '搜索线路',
+			search_no_result: '无匹配结果',
+			search_stop_count: '{n} 站',
+			detail_coord: '坐标',
+			detail_lines: '经过线路',
+			detail_no_lines: '暂无线路经过',
+			detail_headway: '约 {n} 分钟一班',
+			detail_headway_unknown: '班次间隔未知',
+			detail_full_trip: '坐完全程约需 {n} 分钟',
+			detail_lang_title: '切换中英文',
 		},
 		en: {
 			loading: 'Loading...',
@@ -218,6 +232,19 @@
 			ticket_time: 'DURATION',
 			ticket_transfers: 'TRANSFERS',
 			ticket_footer: 'MTR Map · A journey to remember',
+			search_type_station: 'Station',
+			search_type_route: 'Route',
+			search_placeholder_station: 'Search station',
+			search_placeholder_route: 'Search route',
+			search_no_result: 'No matches',
+			search_stop_count: '{n} stops',
+			detail_coord: 'Coordinates',
+			detail_lines: 'Lines',
+			detail_no_lines: 'No lines',
+			detail_headway: 'Every ~{n} min',
+			detail_headway_unknown: 'Headway unknown',
+			detail_full_trip: 'Full journey ~{n} min',
+			detail_lang_title: 'Switch language',
 		}
 	};
 
@@ -277,6 +304,12 @@
 	let currentTrips = [];
 	let pendingConfirm = null; // 删除确认框的回调
 	let currentTicket = null;  // 当前展示的票根 {trip, dataUrl}
+	// 搜索 / 右侧详情侧边栏
+	let highlight = null;       // {type:'station'|'route', id}：地图上高亮的目标
+	let detailState = null;     // {type, id}：侧边栏正在展示的对象
+	let detailLang = 'zh';      // 侧边栏站名用中文还是英文（没有译名时回退本名）
+	let searchMatches = [];     // 当前候选词
+	let searchActiveIndex = -1; // 键盘上下键选中的候选词
 
 	// ===== i18n 工具 =====
 	function t(key, replacements) {
@@ -351,6 +384,16 @@
 	const ticketSave = document.getElementById('ticketSave');
 	const ticketPrint = document.getElementById('ticketPrint');
 	const ticketCancel = document.getElementById('ticketCancel');
+	// 搜索 / 详情侧边栏
+	const searchBox = document.getElementById('searchBox');
+	const searchType = document.getElementById('searchType');
+	const searchInput = document.getElementById('searchInput');
+	const searchResults = document.getElementById('searchResults');
+	const detailPanel = document.getElementById('detailPanel');
+	const detailTitle = document.getElementById('detailTitle');
+	const detailBody = document.getElementById('detailBody');
+	const detailLangBtn = document.getElementById('detailLangBtn');
+	const detailCloseBtn = document.getElementById('detailCloseBtn');
 
 	function applyTheme() {
 		document.body.classList.toggle('light-mode', !isDarkMode);
@@ -380,6 +423,11 @@
 		fillFontSelect();
 		// 已打开的路径查询面板文案同步刷新
 		updateRoutePanel();
+		// 搜索框文案与详情侧边栏（侧边栏语言跟随界面语言）
+		updateSearchUiText();
+		searchResults.style.display = 'none';
+		detailLang = currentLang;
+		if (detailState) renderDetailPanel();
 		render();
 		updateTooltip(lastClientX, lastClientY);
 	}
@@ -715,6 +763,8 @@
 		} else {
 			drawRoutes();
 		}
+		// 高亮画在车站标记之前：线路光晕不会糊住站名，车站金环则正好衬在站点下方
+		drawHighlight();
 		drawStations();
 		if (!routeMode) drawTrains();
 		drawPlayers();
@@ -2448,6 +2498,364 @@
 	ticketCancel.addEventListener('click', () => { ticketDialog.style.display = 'none'; });
 	ticketOverlay.addEventListener('click', () => { ticketDialog.style.display = 'none'; });
 
+	// ===== 搜索 / 右侧详情侧边栏 =====
+	/** 侧边栏里显示的名称：按 detailLang 选，没有译名时回退本名 */
+	function detailNameFrom(name) {
+		const n = splitName(name);
+		return (detailLang === 'en' && n.trans) ? n.trans : n.main;
+	}
+
+	function updateSearchUiText() {
+		searchType.options[0].textContent = t('search_type_station');
+		searchType.options[1].textContent = t('search_type_route');
+		searchInput.placeholder = searchType.value === 'route'
+			? t('search_placeholder_route') : t('search_placeholder_station');
+		searchType.title = t('search_type_station') + ' / ' + t('search_type_route');
+		detailLangBtn.title = t('detail_lang_title');
+		detailCloseBtn.title = t('route_close');
+	}
+
+	/** 经过该车站的所有线路 */
+	function stationLines(stationId) {
+		const out = [];
+		(mapData.routes || []).forEach(route => {
+			if (route.stations && route.stations.indexOf(stationId) !== -1) out.push(route);
+		});
+		return out;
+	}
+
+	/** 线路全程耗时（分钟）：总长度按平均运营速度走 + 每站停站时间 */
+	function routeTravelMinutes(route) {
+		const st = route.stations || [];
+		const paths = route.paths || [];
+		let dist = 0;
+		for (let i = 0; i < st.length - 1; i++) {
+			dist += segmentLength(paths[i], stationMap[st[i]], stationMap[st[i + 1]]);
+		}
+		const sec = dist / ROUTE_AVG_SPEED_PER_SEC + Math.max(0, st.length - 1) * ROUTE_DWELL_SEC;
+		return Math.max(1, Math.round(sec / 60));
+	}
+
+	/** 线路占用的世界坐标范围（用于把视图对准它） */
+	function routeBounds(route) {
+		let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
+		(route.stations || []).forEach(sid => {
+			const st = stationMap[sid];
+			if (!st) return;
+			minX = Math.min(minX, st.x); maxX = Math.max(maxX, st.x);
+			minZ = Math.min(minZ, st.z); maxZ = Math.max(maxZ, st.z);
+		});
+		(route.paths || []).forEach(seg => {
+			if (!seg) return;
+			seg.forEach(pt => {
+				minX = Math.min(minX, pt.x); maxX = Math.max(maxX, pt.x);
+				minZ = Math.min(minZ, pt.z); maxZ = Math.max(maxZ, pt.z);
+			});
+		});
+		return minX <= maxX ? { minX: minX, minZ: minZ, maxX: maxX, maxZ: maxZ } : null;
+	}
+
+	/** 把给定点移到视图中央（不改缩放，避免点一下车站就把视图猛拉一下） */
+	function centerOn(x, z) {
+		offsetX = canvas.width / 2 - x * scale;
+		offsetY = canvas.height / 2 - z * scale;
+		viewInitialized = true;
+	}
+
+	/** 把视图对准给定范围 */
+	function focusBounds(minX, minZ, maxX, maxZ) {
+		const pad = 100;
+		const w = Math.max(maxX - minX, 1);
+		const h = Math.max(maxZ - minZ, 1);
+		const fit = Math.min((canvas.width - pad * 2) / w, (canvas.height - pad * 2) / h);
+		scale = Math.max(0.05, Math.min(fit, 3));
+		offsetX = canvas.width / 2 - (minX + maxX) / 2 * scale;
+		offsetY = canvas.height / 2 - (minZ + maxZ) / 2 * scale;
+		viewInitialized = true;
+	}
+
+	function openStationDetail(station) {
+		if (!station) return;
+		detailState = { type: 'station', id: station.id };
+		detailLang = currentLang;
+		highlight = { type: 'station', id: station.id };
+		renderDetailPanel();
+		detailPanel.style.display = 'flex';
+		centerOn(station.x, station.z);
+		render();
+	}
+
+	function openRouteDetail(route) {
+		if (!route) return;
+		detailState = { type: 'route', id: route.id };
+		detailLang = currentLang;
+		highlight = { type: 'route', id: route.id };
+		renderDetailPanel();
+		detailPanel.style.display = 'flex';
+		const b = routeBounds(route);
+		if (b) focusBounds(b.minX, b.minZ, b.maxX, b.maxZ);
+		render();
+	}
+
+	function closeDetailPanel() {
+		detailState = null;
+		highlight = null;
+		detailPanel.style.display = 'none';
+		render();
+	}
+
+	function renderDetailPanel() {
+		if (!detailState) {
+			detailPanel.style.display = 'none';
+			return;
+		}
+		if (detailState.type === 'route') {
+			renderRouteDetail();
+		} else {
+			renderStationDetail();
+		}
+		detailLangBtn.textContent = detailLang === 'zh' ? 'EN' : '中';
+	}
+
+	function renderStationDetail() {
+		const st = stationMap[detailState.id];
+		if (!st) { closeDetailPanel(); return; }
+		const n = splitName(st.name);
+		const primary = detailNameFrom(st.name);
+		const secondary = detailLang === 'en' ? n.main : n.trans;
+		detailTitle.textContent = primary;
+		detailTitle.style.color = intToRgba(st.color, 1);
+
+		let html = '';
+		if (secondary && secondary !== primary) {
+			html += '<div class="detail-subtitle">' + escapeHtml(secondary) + '</div>';
+		}
+		html += '<div class="detail-row"><span class="detail-label">' + escapeHtml(t('detail_coord')) +
+			'</span><span>X ' + Math.round(st.x) + '　Z ' + Math.round(st.z) + '</span></div>';
+		html += '<div class="detail-row"><span class="detail-label">' + escapeHtml(t('detail_lines')) + '</span></div>';
+		const lines = stationLines(st.id);
+		if (lines.length === 0) {
+			html += '<div class="detail-row"><span>' + escapeHtml(t('detail_no_lines')) + '</span></div>';
+		} else {
+			html += '<div class="detail-line-tags">' + lines.map(r => {
+				const color = intToRgba(r.color, 1);
+				return '<span class="detail-line-tag" data-route="' + r.id + '" style="border-color:' + color +
+					';color:' + color + '">' + escapeHtml(detailNameFrom(r.name)) + '</span>';
+			}).join('') + '</div>';
+		}
+		detailBody.innerHTML = html;
+		// 点线路标签直接切到该线路的信息
+		detailBody.querySelectorAll('.detail-line-tag').forEach(el => {
+			el.addEventListener('click', () => {
+				openRouteDetail((mapData.routes || []).find(r => r.id === Number(el.getAttribute('data-route'))));
+			});
+		});
+	}
+
+	function renderRouteDetail() {
+		const route = (mapData.routes || []).find(r => r.id === detailState.id);
+		if (!route) { closeDetailPanel(); return; }
+		const n = splitName(route.name);
+		const primary = detailNameFrom(route.name);
+		const secondary = detailLang === 'en' ? n.main : n.trans;
+		detailTitle.textContent = primary;
+		detailTitle.style.color = intToRgba(route.color, 1);
+
+		let html = '';
+		if (secondary && secondary !== primary) {
+			html += '<div class="detail-subtitle">' + escapeHtml(secondary) + '</div>';
+		}
+		html += '<div class="detail-headway">' + escapeHtml(route.headway > 0
+			? t('detail_headway', { n: route.headway }) : t('detail_headway_unknown')) + '</div>';
+
+		const color = intToRgba(route.color, 1);
+		html += '<div class="detail-stations" style="--st-line:' + color + '">';
+		(route.stations || []).forEach(sid => {
+			const st = stationMap[sid];
+			html += '<div class="detail-station' + (st && st.lines >= 2 ? ' interchange' : '') + '">' +
+				'<span class="detail-station-dot"></span>' +
+				'<span class="detail-station-name">' +
+					escapeHtml(st ? detailNameFrom(st.name) : String(sid)) + '</span>' +
+			'</div>';
+		});
+		html += '</div>';
+		html += '<div class="detail-footer">' +
+			escapeHtml(t('detail_full_trip', { n: routeTravelMinutes(route) })) + '</div>';
+		detailBody.innerHTML = html;
+	}
+
+	// ===== 地图高亮 =====
+	function drawHighlight() {
+		if (!highlight) return;
+		if (highlight.type === 'route') {
+			const route = (mapData.routes || []).find(r => r.id === highlight.id);
+			if (route) highlightRoute(route);
+		} else {
+			const st = stationMap[highlight.id];
+			if (st) highlightStation(st);
+		}
+	}
+
+	/** 线路高亮：先铺一层金色光晕，再用线路本色盖回去 */
+	function highlightRoute(route) {
+		const stations = route.stations || [];
+		const paths = route.paths || [];
+		const base = Math.max(2, 4 * Math.sqrt(scale));
+		const stroke = (width, style) => {
+			ctx.strokeStyle = style;
+			ctx.lineWidth = width;
+			ctx.lineCap = 'round';
+			ctx.lineJoin = 'round';
+			for (let i = 0; i < stations.length - 1; i++) {
+				const seg = paths[i];
+				ctx.beginPath();
+				if (seg && seg.length >= 2) {
+					seg.forEach((pt, k) => {
+						const p = worldToCanvas(pt.x, pt.z);
+						if (k === 0) ctx.moveTo(p.x, p.y);
+						else ctx.lineTo(p.x, p.y);
+					});
+				} else {
+					const a = stationMap[stations[i]];
+					const b = stationMap[stations[i + 1]];
+					if (!a || !b) continue;
+					const pa = worldToCanvas(a.x, a.z);
+					const pb = worldToCanvas(b.x, b.z);
+					ctx.moveTo(pa.x, pa.y);
+					ctx.lineTo(pb.x, pb.y);
+				}
+				ctx.stroke();
+			}
+		};
+		stroke(base * 3, 'rgba(255, 208, 64, 0.45)');
+		stroke(base + 1.5, intToRgba(route.color, 1));
+	}
+
+	/** 车站高亮：金色双环 */
+	function highlightStation(st) {
+		const p = worldToCanvas(st.x, st.z);
+		const r = Math.max(6, 8 * Math.sqrt(scale));
+		ctx.save();
+		ctx.beginPath();
+		ctx.arc(p.x, p.y, r + 5, 0, Math.PI * 2);
+		ctx.strokeStyle = 'rgba(255, 208, 64, 0.45)';
+		ctx.lineWidth = 6;
+		ctx.stroke();
+		ctx.beginPath();
+		ctx.arc(p.x, p.y, r + 11, 0, Math.PI * 2);
+		ctx.strokeStyle = '#ffd040';
+		ctx.lineWidth = 2.5;
+		ctx.stroke();
+		ctx.restore();
+	}
+
+	// ===== 搜索框 =====
+	/** 按当前「搜车站 / 搜线路」与关键词挑出候选词 */
+	function searchTargets() {
+		const q = searchInput.value.trim().toLowerCase();
+		if (!q) return [];
+		const type = searchType.value;
+		const out = [];
+		const source = type === 'route' ? (mapData.routes || []) : (mapData.stations || []);
+		source.forEach(item => {
+			const n = splitName(item.name);
+			if (n.main.toLowerCase().indexOf(q) === -1 && n.trans.toLowerCase().indexOf(q) === -1) return;
+			out.push({
+				type: type === 'route' ? 'route' : 'station',
+				id: item.id,
+				color: item.color,
+				name: item.name,
+				lines: item.lines || 0,
+				stopCount: (item.stations || []).length
+			});
+		});
+		return out.slice(0, 30);
+	}
+
+	function renderSearchResults() {
+		searchMatches = searchTargets();
+		searchActiveIndex = searchMatches.length ? 0 : -1;
+		if (searchMatches.length === 0) {
+			if (!searchInput.value.trim()) {
+				searchResults.style.display = 'none';
+				return;
+			}
+			searchResults.innerHTML = '<div class="search-empty">' + escapeHtml(t('search_no_result')) + '</div>';
+			searchResults.style.display = 'block';
+			return;
+		}
+		searchResults.innerHTML = searchMatches.map((it, i) => {
+			const sub = it.type === 'route'
+				? t('search_stop_count', { n: it.stopCount })
+				: (it.lines >= 2 ? t('interchange') : '');
+			return '<div class="search-item' + (i === searchActiveIndex ? ' active' : '') +
+				'" data-index="' + i + '">' +
+				'<span class="search-item-dot" style="background:' + intToRgba(it.color, 1) + '"></span>' +
+				'<span class="search-item-name">' + escapeHtml(detailNameFrom(it.name)) + '</span>' +
+				(sub ? '<span class="search-item-sub">' + escapeHtml(sub) + '</span>' : '') +
+			'</div>';
+		}).join('');
+		searchResults.style.display = 'block';
+		searchResults.querySelectorAll('.search-item').forEach(el => {
+			// 用 mousedown 抢在输入框失焦之前选中，避免下拉框先被收起
+			el.addEventListener('mousedown', e => {
+				e.preventDefault();
+				selectSearchItem(Number(el.getAttribute('data-index')));
+			});
+		});
+	}
+
+	/** 高亮候选词（键盘上下键用），不重排列表 */
+	function setSearchActive(index) {
+		if (index < 0 || index >= searchMatches.length) return;
+		searchActiveIndex = index;
+		const items = searchResults.querySelectorAll('.search-item');
+		items.forEach((el, i) => el.classList.toggle('active', i === index));
+		if (items[index]) items[index].scrollIntoView({ block: 'nearest' });
+	}
+
+	function selectSearchItem(index) {
+		const item = searchMatches[index];
+		searchResults.style.display = 'none';
+		if (!item) return;
+		if (item.type === 'route') {
+			openRouteDetail((mapData.routes || []).find(r => r.id === item.id));
+		} else {
+			openStationDetail(stationMap[item.id]);
+		}
+	}
+
+	searchInput.addEventListener('input', renderSearchResults);
+	searchInput.addEventListener('focus', renderSearchResults);
+	searchType.addEventListener('change', () => {
+		updateSearchUiText();
+		renderSearchResults();
+	});
+	searchInput.addEventListener('keydown', e => {
+		if (e.key === 'ArrowDown') {
+			e.preventDefault();
+			setSearchActive(Math.min(searchActiveIndex + 1, searchMatches.length - 1));
+		} else if (e.key === 'ArrowUp') {
+			e.preventDefault();
+			setSearchActive(Math.max(searchActiveIndex - 1, 0));
+		} else if (e.key === 'Enter') {
+			e.preventDefault();
+			selectSearchItem(searchActiveIndex >= 0 ? searchActiveIndex : 0);
+		} else if (e.key === 'Escape') {
+			searchResults.style.display = 'none';
+		}
+	});
+	document.addEventListener('click', e => {
+		if (searchResults.style.display === 'block' && !searchBox.contains(e.target)) {
+			searchResults.style.display = 'none';
+		}
+	});
+	detailLangBtn.addEventListener('click', () => {
+		detailLang = detailLang === 'zh' ? 'en' : 'zh';
+		renderDetailPanel();
+	});
+	detailCloseBtn.addEventListener('click', () => { closeDetailPanel(); });
+
 	// ===== 交互 =====
 	function setupInteraction() {
 		canvas.addEventListener('mousedown', e => {
@@ -2471,11 +2879,20 @@
 			}
 		});
 		window.addEventListener('mouseup', e => {
-			// 路径查询模式：位移小于 4px 才算「点击车站」，避免与拖拽冲突
-			if (isDragging && routeMode && e.target === canvas &&
-				Math.hypot(e.clientX - mouseDownX, e.clientY - mouseDownY) < 4) {
+			// 位移小于 4px 才算「点击」，避免与拖拽冲突
+			const clicked = isDragging && e.target === canvas &&
+				Math.hypot(e.clientX - mouseDownX, e.clientY - mouseDownY) < 4;
+			if (clicked) {
 				const rect = canvas.getBoundingClientRect();
-				handleStationPick(getStationAt(e.clientX - rect.left, e.clientY - rect.top));
+				const station = getStationAt(e.clientX - rect.left, e.clientY - rect.top);
+				if (routeMode) {
+					handleStationPick(station);
+				} else if (station) {
+					// 非路径查询模式下点车站：右侧弹出该站详情
+					openStationDetail(station);
+				} else {
+					closeDetailPanel();
+				}
 			}
 			isDragging = false;
 		});
@@ -2534,6 +2951,7 @@
 		routeBtn.title = t('route_btn_title');
 		controlsToggle.title = t('controls_toggle');
 		fontSelect.title = t('font_title');
+		updateSearchUiText();
 		fillFontSelect();
 		updateDepotBtn();
 		updateLegend();

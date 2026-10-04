@@ -56,6 +56,11 @@ public final class MtrMapCommon {
     //?}
 
     private static MinecraftServer currentServer;
+    /** 端口顺延：配置端口与最终实际端口（相等或不曾启动时为 -1 表示无需提示） */
+    private static int portShiftFrom = -1;
+    private static int portShiftTo = -1;
+    /** 已经收到过端口顺延提示的玩家，避免每 tick 重复刷屏 */
+    private static final java.util.Set<UUID> portNoticeSent = new java.util.HashSet<>();
 
     private MtrMapCommon() {
     }
@@ -75,10 +80,22 @@ public final class MtrMapCommon {
         TripStore.clear();
         RailPathFinder.clear();
         MapDataCollector.captureRailwayData(server);
+        portShiftFrom = -1;
+        portShiftTo = -1;
+        portNoticeSent.clear();
         try {
-            int port = MtrMapConfig.getPort();
-            MapHttpServer.start(port, server);
-            LOGGER.info("MTR Map HTTP 服务器已启动于 http://localhost:{}", port);
+            int configuredPort = MtrMapConfig.getPort();
+            // 端口被占用时 start 会自动往后顺延，返回真正绑定成功的端口
+            int port = MapHttpServer.start(configuredPort, server);
+            MtrMapConfig.setActivePort(port);
+            if (port != configuredPort) {
+                // 顺延了：记下来，等玩家进游戏后在消息栏里提示一次
+                portShiftFrom = configuredPort;
+                portShiftTo = port;
+                LOGGER.warn("MTR Map HTTP 端口 {} 已被占用，已自动顺延到 http://localhost:{}", configuredPort, port);
+            } else {
+                LOGGER.info("MTR Map HTTP 服务器已启动于 http://localhost:{}", port);
+            }
         } catch (Exception e) {
             LOGGER.error("MTR Map HTTP 服务器启动失败", e);
         }
@@ -92,6 +109,10 @@ public final class MtrMapCommon {
         } catch (Exception e) {
             LOGGER.error("MTR Map HTTP 服务器停止失败", e);
         }
+        MtrMapConfig.setActivePort(0);
+        portShiftFrom = -1;
+        portShiftTo = -1;
+        portNoticeSent.clear();
         currentServer = null;
         NavTaskStore.clear();
         TripStore.clear();
@@ -101,6 +122,25 @@ public final class MtrMapCommon {
     /** 每个 tick 末更新玩家位置。 */
     public static void onServerTick(MinecraftServer server) {
         PlayerTracker.update(server);
+        notifyPortShift(server);
+    }
+
+    /**
+     * 端口被占用而顺延时，在玩家进游戏后往消息栏发一条提示。
+     *
+     * <p>顺延发生在服务器启动那一刻，那时通常没有玩家在线，所以要等玩家进来时补发；
+     * 每位玩家只提示一次。
+     */
+    private static void notifyPortShift(MinecraftServer server) {
+        if (portShiftTo < 0 || portShiftTo == portShiftFrom) {
+            return;
+        }
+        for (net.minecraft.server.level.ServerPlayer player : server.getPlayerList().getPlayers()) {
+            if (portNoticeSent.add(player.getUUID())) {
+                player.sendSystemMessage(literal("§e[MTR Map] 端口 " + portShiftFrom + " 已被占用，"
+                        + "地图服务已顺延到 " + portShiftTo + "，请访问 http://localhost:" + portShiftTo));
+            }
+        }
     }
 
     /** 注册 /mtrmap showdepots <true|false> 命令。 */
