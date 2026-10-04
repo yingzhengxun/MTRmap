@@ -55,13 +55,16 @@ dependencies {
 }
 
 processResources {
+    // NeoForge 版本号是 21.1.252 这种「MC 小版本.MC 补丁.构建号」。写进依赖的范围只取前两段（21.1），
+    // 不能钉死具体构建号：否则用户装 21.1.x 的其它 NeoForge 会因为"依赖版本不符"整包不加载。
+    def neoforgeDep = commonProject.property("deps.neoforge_loader").toString().split("\\.").take(2).join(".")
     def props = [
             version  : modVersion,
             id       : rootProject.property("mod.id"),
             name     : rootProject.property("mod.name"),
             minecraft: commonProject.property("mod.mc_dep_forgelike"),
             mtr      : commonProject.property("mod.mtr_dep"),
-            neoforge : commonProject.property("deps.neoforge_loader")
+            neoforge : neoforgeDep
     ]
     inputs.properties props
     filesMatching("META-INF/neoforge.mods.toml") {

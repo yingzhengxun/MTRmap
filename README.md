@@ -8,17 +8,12 @@
 
 | Minecraft | 加载器 | 通用 jar |
 | --- | --- | --- |
-| 1.16.5 | Fabric / Forge | 无（单独输出 fabric、forge 两个 jar） |
-| 1.18.2 | Fabric / Forge | `mtrmap-<版本>-1.18.2-universal.jar` |
-| 1.19.2 | Fabric / Forge | `mtrmap-<版本>-1.19.2-universal.jar` |
 | 1.20.1 | Fabric / Forge | `mtrmap-<版本>-1.20.1-universal.jar` |
 | 1.21.1 | Fabric / NeoForge | `mtrmap-<版本>-1.21.1-universal.jar` |
 
 每个 MC 版本只产出一个 `universal` jar，同一个 jar 在对应的两个加载器下都能直接加载，不需要区分安装。
 
-> 1.16.5 是例外：它的 Forge（36.x）还没有 JarJar，「外壳 + 内嵌」的通用 jar 在 Forge 端加载不了，因此这个版本改为输出两个独立 jar（`mtrmap-fabric-<版本>.jar` 与 `mtrmap-forge-<版本>.jar`），按加载器分别安装。JarJar 从 Forge 1.18.2（40.x）起才提供，所以 1.18.2 及以后的版本仍用通用 jar。
-
-> 1.21.1 没有 legacy Forge 分支，因为 MTR 在该版本只提供 Fabric / NeoForge 版。1.16.5 与 1.18.2 对接 MTR 3.x。
+> 1.21.1 没有 legacy Forge 分支，因为 MTR 在该版本只提供 Fabric / NeoForge 版。1.20.1 对接 MTR 3.x，1.21.1 对接 MTR 4.x。
 
 ## 功能
 
@@ -42,7 +37,7 @@
 
 1. 安装 Minecraft 对应版本、加载器，以及 **MTR 模组**（3.x 与 4.x 均可，依赖范围声明为通配符）。
 2. Fabric 版还需安装 **Fabric API**（Forge / NeoForge 版不需要）。
-3. 把对应 MC 版本的 `mtrmap-<版本>-<MC>-universal.jar` 放进 `mods/`（1.16.5 放 `mtrmap-fabric-<版本>.jar` 或 `mtrmap-forge-<版本>.jar`）。
+3. 把对应 MC 版本的 `mtrmap-<版本>-<MC>-universal.jar` 放进 `mods/`。
 4. 可选：安装 Xaero 的世界地图以启用地图叠加层。
 5. 启动游戏 / 服务器，浏览器打开 `http://localhost:1145`，或在铁路仪表板点「交通线路图」。
 
@@ -91,13 +86,13 @@
 
 ## 构建
 
-只构建通用 jar 与 1.16.5 的两个独立 jar，一条命令完成：
+一条命令构建两个通用 jar：
 
 ```bat
-.\gradlew.bat :1.18.2:universalJar :1.19.2:universalJar :1.20.1:universalJar :1.21.1:universalJar :fabric:1.16.5:buildAndCollect :forge:1.16.5:buildAndCollect
+.\gradlew.bat :1.20.1:universalJar :1.21.1:universalJar
 ```
 
-产物位于 `build/libs/<模组版本>/<MC 版本>/universal/`（1.16.5 则分别在 `.../<MC 版本>/fabric/` 与 `.../<MC 版本>/forge/`）。
+产物位于 `build/libs/<模组版本>/<MC 版本>/universal/`。
 
 ### universal jar 的实现方式
 
@@ -107,7 +102,7 @@
 - 两个真实加载器 jar 放在 `META-INF/jars/` 下：Fabric 通过 `fabric.mod.json` 的 `jars` 字段加载，Forge / NeoForge 通过 JarJar 的 `META-INF/jarjar/metadata.json` 加载。
 - 外壳的元数据、桥接源码与编译均由 `build.gradle`（Stonecutter centralScript）中的 `generateBridgeMeta` / `generateBridgeSource` / `compileBridgeMod` / `universalJar` 任务自动完成。
 
-> 说明：分加载器任务 `buildAndCollect` 只用于 1.16.5（该版本没有通用 jar）；其余版本只发布 universal jar。
+> 说明：每个版本都发布 universal jar，不再需要分加载器的 `buildAndCollect`。
 
 ## 目录结构
 
@@ -154,17 +149,12 @@ Displays the Minecraft Transit Railway (MTR) network on `localhost:1145`, includ
 
 | Minecraft | Loaders | Universal jar |
 | --- | --- | --- |
-| 1.16.5 | Fabric / Forge | None (two standalone jars instead) |
-| 1.18.2 | Fabric / Forge | `mtrmap-<version>-1.18.2-universal.jar` |
-| 1.19.2 | Fabric / Forge | `mtrmap-<version>-1.19.2-universal.jar` |
 | 1.20.1 | Fabric / Forge | `mtrmap-<version>-1.20.1-universal.jar` |
 | 1.21.1 | Fabric / NeoForge | `mtrmap-<version>-1.21.1-universal.jar` |
 
 Each Minecraft version ships a single `universal` jar that loads directly on both of its loaders — no per-loader build to pick.
 
-> 1.16.5 is the exception: its Forge build (36.x) has no JarJar, so a "shell + embedded jars" universal jar cannot load on Forge. That version therefore ships two standalone jars (`mtrmap-fabric-<version>.jar` and `mtrmap-forge-<version>.jar`) to be installed per loader. JarJar only arrived with Forge 1.18.2 (40.x), so 1.18.2 and later still use universal jars.
-
-> There is no legacy Forge branch for 1.21.1, because MTR only provides Fabric / NeoForge builds for that version. 1.16.5 and 1.18.2 target MTR 3.x.
+> There is no legacy Forge branch for 1.21.1, because MTR only provides Fabric / NeoForge builds for that version. 1.20.1 targets MTR 3.x, 1.21.1 targets MTR 4.x.
 
 ### Features
 
@@ -188,7 +178,7 @@ Each Minecraft version ships a single `universal` jar that loads directly on bot
 
 1. Install the matching Minecraft version, loader, and the **MTR mod** (both 3.x and 4.x work — the dependency range is declared as a wildcard).
 2. The Fabric build additionally requires **Fabric API** (the Forge / NeoForge builds do not).
-3. Drop the `mtrmap-<version>-<MC>-universal.jar` for your MC version into `mods/` (for 1.16.5, use `mtrmap-fabric-<version>.jar` or `mtrmap-forge-<version>.jar`).
+3. Drop the `mtrmap-<version>-<MC>-universal.jar` for your MC version into `mods/`.
 4. Optional: install Xaero's World Map to enable the map overlay.
 5. Launch the game / server, then open `http://localhost:1145` in a browser, or click the Route Map button in the railway dashboard.
 
@@ -237,13 +227,13 @@ Trip records are persisted to `mods/mapconfig/mtrmap_trips.json` (archived per p
 
 ### Building
 
-Build the universal jars plus the two standalone 1.16.5 jars with a single command:
+Build both universal jars with a single command:
 
 ```bat
-.\gradlew.bat :1.18.2:universalJar :1.19.2:universalJar :1.20.1:universalJar :1.21.1:universalJar :fabric:1.16.5:buildAndCollect :forge:1.16.5:buildAndCollect
+.\gradlew.bat :1.20.1:universalJar :1.21.1:universalJar
 ```
 
-Output lands in `build/libs/<mod version>/<MC version>/universal/` (for 1.16.5, under `.../<MC version>/fabric/` and `.../<MC version>/forge/`).
+Output lands in `build/libs/<mod version>/<MC version>/universal/`.
 
 #### How the universal jar works
 
@@ -253,7 +243,7 @@ It uses a "shell + embedded jars" layout:
 - The two real loader jars are placed under `META-INF/jars/`: Fabric loads them via the `jars` field in `fabric.mod.json`, while Forge / NeoForge use JarJar's `META-INF/jarjar/metadata.json`.
 - The shell's metadata, bridge source and compilation are all produced automatically by the `generateBridgeMeta` / `generateBridgeSource` / `compileBridgeMod` / `universalJar` tasks in `build.gradle` (the Stonecutter centralScript).
 
-> Note: the per-loader `buildAndCollect` task is only used for 1.16.5 (which has no universal jar); every other version publishes universal jars only.
+> Note: every version publishes a universal jar, so the per-loader `buildAndCollect` task is no longer needed.
 
 ### Project Layout
 

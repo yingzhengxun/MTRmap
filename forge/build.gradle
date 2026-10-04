@@ -1,4 +1,4 @@
-// Stonecutter 分支脚本：每个 forge 版本节点执行一次（1.19.2 / 1.20.1）。
+// Stonecutter 分支脚本：forge 版本节点（1.20.1）执行一次。
 plugins {
     id "dev.architectury.loom"
     id "architectury-plugin"
@@ -10,11 +10,10 @@ def mc = sc.current.version
 def loader = findProperty("loom.platform")
 def modVersion = rootProject.property("mod.version")
 def commonProject = sc.node.sibling("").project
-// MC 1.20.5 起要求 Java 21，1.18~1.20.4 用 17，1.16.5 及更早用 8
+// MC 1.21.1 要求 Java 21，1.20.1 用 17
 def mcMinor = mc.split("\\.")[1] as int
-def javaVersion = mcMinor >= 21 ? JavaVersion.VERSION_21
-        : (mcMinor >= 18 ? JavaVersion.VERSION_17 : JavaVersion.VERSION_1_8)
-def javaRelease = mcMinor >= 21 ? 21 : (mcMinor >= 18 ? 17 : 8)
+def javaVersion = mcMinor >= 21 ? JavaVersion.VERSION_21 : JavaVersion.VERSION_17
+def javaRelease = mcMinor >= 21 ? 21 : 17
 
 version = modVersion
 base {
@@ -88,9 +87,8 @@ processResources {
     filesMatching("META-INF/mods.toml") {
         expand props
     }
-    // Mixin 0.8.4（Forge 1.16.5 自带）还没有 JAVA_17 这个 CompatibilityLevel，
-    // 1.16.5 因此降到 JAVA_8，与根脚本里的 mtrmap.mixins.json 保持一致。
-    def mixinCompat = mcMinor >= 18 ? "JAVA_17" : "JAVA_8"
+    // compatibilityLevel 与根脚本里的 mtrmap.mixins.json 保持一致
+    def mixinCompat = "JAVA_17"
     inputs.property "compatibilityLevel", mixinCompat
     filesMatching("mtrmap.xaero.mixins.json") {
         expand "compatibilityLevel": mixinCompat

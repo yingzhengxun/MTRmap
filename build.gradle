@@ -8,11 +8,10 @@ plugins {
 def sc = stonecutter
 def mc = sc.current.version
 def modVersion = property("mod.version")
-// 本地 JDK 21；MC 1.20.5 起要求 Java 21，1.18~1.20.4 用 17，1.16.5 及更早用 8
+// 本地 JDK 21；MC 1.21.1 要求 Java 21，1.20.1 用 17
 def mcMinor = mc.split("\\.")[1] as int
-def javaVersion = mcMinor >= 21 ? JavaVersion.VERSION_21
-        : (mcMinor >= 18 ? JavaVersion.VERSION_17 : JavaVersion.VERSION_1_8)
-def javaRelease = mcMinor >= 21 ? 21 : (mcMinor >= 18 ? 17 : 8)
+def javaVersion = mcMinor >= 21 ? JavaVersion.VERSION_21 : JavaVersion.VERSION_17
+def javaRelease = mcMinor >= 21 ? 21 : 17
 
 // 当前 MC 版本支持哪些加载器（在 versions/<mc>/gradle.properties 里显式声明）
 def platforms = property("mod.platforms").toString().split(",")
@@ -62,15 +61,12 @@ dependencies {
 // "Failed to load a valid ResourcePackInfo" 并丢弃整个 mod 资源包，
 // 结果是语言文件不加载、按钮文字显示成原始 key（key.mtrmap.map_button）。
 // pack_format 每个 MC 版本不同，所以这里按当前版本填进去；新版本节点要在这里补一条映射。
-def packFormat = ["1.16.5": 6, "1.18.2": 8, "1.19.2": 9, "1.20.1": 15, "1.21.1": 34][mc]
+def packFormat = ["1.20.1": 15, "1.21.1": 34][mc]
 if (packFormat == null) {
     throw new GradleException("pack.mcmeta 缺少 MC ${mc} 的 pack_format 映射")
 }
-// Mixin 的 compatibilityLevel：Forge 1.16.5 自带的是 Mixin 0.8.4，它的 CompatibilityLevel
-// 枚举里还没有 JAVA_17，写成 JAVA_17 会在解析 mixin 配置时直接抛 IllegalArgumentException。
-// 1.16.5 的字节码本身也是 Java 8，所以这里跟着降到 JAVA_8。
-def mixinCompat = ["1.16.5": "JAVA_8", "1.18.2": "JAVA_17", "1.19.2": "JAVA_17",
-                   "1.20.1": "JAVA_17", "1.21.1": "JAVA_17"][mc]
+// Mixin 的 compatibilityLevel：跟着该版本字节码的 Java 版本走。
+def mixinCompat = ["1.20.1": "JAVA_17", "1.21.1": "JAVA_17"][mc]
 
 processResources {
     inputs.property "packFormat", packFormat
@@ -123,23 +119,22 @@ tasks.register("buildAndCollect", Copy) {
 // fabric.mod.json 的 mixins。
 // 代价：mod 列表里会多出一个没有实际内容的 "MTR Map Bridge" 外壳条目。
 //
-// 平台专属的加载器名：1.16.5 / 1.18.2 / 1.19.2 / 1.20.1 是 fabric + forge，1.21.1 是 fabric + neoforge
+// 平台专属的加载器名：1.20.1 是 fabric + forge，1.21.1 是 fabric + neoforge
 def bridgePlatformPaths = platforms.collect { loader -> ":${loader}:${mc}" }
         .findAll { path -> rootProject.findProject(path) != null }
-// 1.16.5 例外：这个版本的 Forge（36.x）还没有 JarJar，「外壳 + 内嵌」的通用 jar
-// 在 Forge 端加载不了，所以不走通用 jar，直接输出 fabric / forge 两个独立 jar
-// （两个平台脚本各自的 buildAndCollect 会分别收进 build/libs/<mod>/<mc>/<loader>）。
-// JarJar 是 Forge 1.18.2（40.x）才引入的，故 1.18.2 及以后的版本仍用通用 jar。
-def supportsUniversalJar = mc != "1.16.5"
+// 保留的两个版本（1.20.1 / 1.21.1）的 Forge / NeoForge 都自带 JarJar，所以一律走「外壳 + 内嵌」的通用 jar。
 // 只在版本节点（:1.20.1 这种）上生成，根项目本身不生成
-if (supportsUniversalJar && bridgePlatformPaths.size() >= 2 && project.path == ":${mc}") {
+if (bridgePlatformPaths.size() >= 2 && project.path == ":${mc}") {
     def archGroup = property("mod.group").toString()
     def archArtifact = property("mod.id").toString()
     def bridgeId = "${archArtifact}_bridge"
     def bridgeDir = layout.buildDirectory.dir("bridge-meta")
-    // Forge 的 FML 语言提供者版本只有主版本号（1.20.1 是 47、1.19.2 是 43）
+    // Forge 的 FML 语言提供者版本只有主版本号（1.20.1 是 47）
     def fmlLoaderVersion = property("deps.forge_loader").toString().split("-").last().split("\\.")[0]
     def neoforgeVersion = property("deps.neoforge_loader").toString()
+    // NeoForge 版本号是 <MC 小版本>.<MC 补丁>.<构建号>（如 21.1.252）。依赖范围只写到前两段（21.1），
+    // 不能钉死具体构建号：否则用户装 21.1.x 的其它版本时会因为"依赖版本不符"整包不加载。
+    def neoforgeMajor = neoforgeVersion.split("\\.").take(2).join(".")
     def mcDepFabric = property("mod.mc_dep_fabric").toString()
     def mcDepForgelike = property("mod.mc_dep_forgelike").toString()
     def mtrDep = property("mod.mtr_dep").toString()
@@ -166,6 +161,7 @@ if (supportsUniversalJar && bridgePlatformPaths.size() >= 2 && project.path == "
         inputs.property "fabricLoader", fabricLoader
         inputs.property "fmlLoaderVersion", fmlLoaderVersion
         inputs.property "neoforgeVersion", neoforgeVersion
+        inputs.property "neoforgeMajor", neoforgeMajor
         inputs.property "packFormat", packFormat
         inputs.property "fabricJarName", fabricJarName
         inputs.property "forgelikeJarName", String.valueOf(forgelikeJarName)
@@ -275,7 +271,7 @@ side = "BOTH"
 [[dependencies.${bridgeId}]]
 modId = "neoforge"
 type = "required"
-versionRange = "[${neoforgeVersion},)"
+versionRange = "[${neoforgeMajor},)"
 ordering = "NONE"
 side = "BOTH"
 
