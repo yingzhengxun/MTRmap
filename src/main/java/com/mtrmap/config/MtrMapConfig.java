@@ -60,18 +60,6 @@ public class MtrMapConfig {
 		activePort = port;
 	}
 
-	/**
-	 * Xaero 世界地图叠加层（在地图上显示 MTR 线网）是否开启。
-	 * 默认开启；世界地图右侧的开关按钮会改写这个值并保存。
-	 */
-	public static boolean isXaeroOverlay() {
-		return data.xaeroOverlay;
-	}
-
-	public static void setXaeroOverlay(boolean value) {
-		data.xaeroOverlay = value;
-	}
-
 	public static void load() {
 		Path path = getConfigPath();
 		try {
@@ -112,7 +100,5 @@ public class MtrMapConfig {
 	public static class ConfigData {
 		public boolean showDepots = true;
 		public int port = 1145;
-		/** 是否在 Xaero 世界地图上叠加 MTR 线网 */
-		public boolean xaeroOverlay = true;
 	}
 }

@@ -1,7 +1,5 @@
 {
     "key.mtrmap.map_button": "Traffic Map",
-    "mtrmap.xaero.on": "Lines: ON",
-    "mtrmap.xaero.off": "Lines: OFF",
-    "mtrmap.xaero.depot.on": "Depots: ON",
-    "mtrmap.xaero.depot.off": "Depots: OFF"
+    "key.mtrmap.open_map": "Open Map Window",
+    "key.mtrmap.map_title": "MTR Map"
 }

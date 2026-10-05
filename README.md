@@ -30,16 +30,16 @@
 ### 游戏内
 
 - 在 MTR 铁路仪表板上注入「交通线路图」按钮，点击后用系统浏览器打开网页地图。
-- Xaero 世界地图叠加层：在世界地图上叠加 MTR 线网（可在配置中开关，另有地图侧开关按钮）。
+- **游戏内地图窗口（F6）**：以 squaremap 渲染的瓦片为底图，叠加 MTR 线网、车站、换乘站、车厂、列车与玩家；拖拽平移、滚轮缩放；左侧搜索（车站 / 线路）与线路一览，右侧工具栏（路径查询 / 夜间模式 / 中英文 / 车厂开关 / 缩放 / 重置 / 我的位置），点车站或线路可看详情、做路径查询并把方案同步到游戏内导航。
 - 导航 HUD 面板：显示当前行程进度；`Ctrl+X`（无界面打开时）退出导航；完成或退出时上传行程记录。
 
 ## 安装
 
 1. 安装 Minecraft 对应版本、加载器，以及 **MTR 模组**（3.x 与 4.x 均可，依赖范围声明为通配符）。
 2. Fabric 版还需安装 **Fabric API**（Forge / NeoForge 版不需要）。
-3. 把对应 MC 版本的 `mtrmap-<版本>-<MC>-universal.jar` 放进 `mods/`。
-4. 可选：安装 Xaero 的世界地图以启用地图叠加层。
-5. 启动游戏 / 服务器，浏览器打开 `http://localhost:1145`，或在铁路仪表板点「交通线路图」。
+3. 安装 **squaremap**（游戏内地图窗口用它渲染的瓦片做底图，是硬前置；未安装时本模组不会加载）。
+4. 把对应 MC 版本的 `mtrmap-<版本>-<MC>-universal.jar` 放进 `mods/`。
+5. 启动游戏 / 服务器，浏览器打开 `http://localhost:1145`，或在铁路仪表板点「交通线路图」，游戏内按 `F6` 打开地图窗口。
 
 ## 配置
 
@@ -48,8 +48,7 @@
 ```json
 {
   "showDepots": true,
-  "port": 1145,
-  "xaeroOverlay": true
+  "port": 1145
 }
 ```
 
@@ -57,7 +56,8 @@
 | --- | --- |
 | `showDepots` | 是否显示车厂 |
 | `port` | HTTP 服务端口，默认 `1145`。被占用时自动往后顺延到第一个可用端口，并在玩家进游戏时于消息栏提示实际端口 |
-| `xaeroOverlay` | 是否在 Xaero 世界地图上叠加 MTR 线网 |
+
+游戏内地图窗口的底图端口直接取 squaremap 自己的配置（`config/squaremap/config.yml` 的 `httpd.port`，默认 `8080`）。
 
 行程记录落盘在 `mods/mapconfig/mtrmap_trips.json`（按玩家 UUID 归档，网页端展示与删除）。
 
@@ -74,7 +74,7 @@
 | GET | `/` | 地图网页（index.html） |
 | GET | `/style.css`、`/map.js` | 网页静态资源 |
 | GET | `/api/data` | 车站 / 线路 / 车厂 / 列车 JSON |
-| GET | `/api/overlay` | 仅线网几何（供 Xaero 叠加层使用，体积更小） |
+| GET | `/api/overlay` | 仅线网几何（供游戏内地图窗口使用，体积更小） |
 | GET | `/api/players` | 玩家位置 JSON |
 | GET | `/api/whoami` | 按请求来源 IP 识别网页是哪个在线玩家打开的 |
 | POST | `/api/nav` | 网页向指定玩家下发导航任务 |
@@ -110,7 +110,7 @@
 mtrmap/
 ├── src/main/                     # 公共源码（根节点的 src 即 common）
 │   ├── java/com/mtrmap/
-│   │   ├── client/               # 客户端公共逻辑、导航 HUD、Xaero 叠加层渲染
+│   │   ├── client/               # 客户端公共逻辑、导航 HUD、游戏内地图窗口
 │   │   ├── config/               # mtrmap.json 读写
 │   │   ├── mixin/                # Mixin 注入（仪表板按钮、HUD 等）
 │   │   ├── platform/             # 平台/路径抽象
@@ -121,7 +121,7 @@ mtrmap/
 │       └── mtrmap.mixins.json
 ├── fabric/  forge/  neoforge/    # 各加载器的入口、事件转接与平台实现
 ├── versions/                     # 每个 MC 版本一份依赖配置（versions/<mc>/gradle.properties）
-├── libs/                         # 本地依赖 jar（MTR、Xaero，按文件名在各版本配置中引用）
+├── libs/                         # 本地依赖 jar（MTR、squaremap，按文件名在各版本配置中引用）
 ├── build.gradle                  # Stonecutter centralScript：版本节点与通用 jar 打包
 ├── stonecutter.gradle            # 版本/加载器分支定义
 └── settings.gradle
@@ -171,16 +171,16 @@ Each Minecraft version ships a single `universal` jar that loads directly on bot
 #### In game
 
 - Injects a "Route Map" button into MTR's railway dashboard that opens the web map in the system browser.
-- Xaero world map overlay: renders the MTR network on top of the world map (toggleable in the config, plus an on-map button).
+- **In-game map window (F6)**: squaremap tiles as the base map with the MTR network, stations, interchanges, depots, trains and players overlaid. Drag to pan, scroll to zoom; station/line search and a line list on the left, a toolbar on the right (route planner / night mode / language / depots / zoom / reset / my location), and station or line details. Route queries are pushed to the in-game navigation.
 - Navigation HUD panel showing current trip progress. `Ctrl+X` (with no screen open) exits navigation; the trip is uploaded on completion or exit.
 
 ### Installation
 
 1. Install the matching Minecraft version, loader, and the **MTR mod** (both 3.x and 4.x work — the dependency range is declared as a wildcard).
 2. The Fabric build additionally requires **Fabric API** (the Forge / NeoForge builds do not).
-3. Drop the `mtrmap-<version>-<MC>-universal.jar` for your MC version into `mods/`.
-4. Optional: install Xaero's World Map to enable the map overlay.
-5. Launch the game / server, then open `http://localhost:1145` in a browser, or click the Route Map button in the railway dashboard.
+3. Install **squaremap** (the in-game map window uses its rendered tiles as the base map; it is a hard dependency and this mod will not load without it).
+4. Drop the `mtrmap-<version>-<MC>-universal.jar` for your MC version into `mods/`.
+5. Launch the game / server, then open `http://localhost:1145` in a browser, click the Route Map button in the railway dashboard, or press `F6` in game.
 
 ### Configuration
 
@@ -189,8 +189,7 @@ The config file lives at `mods/mapconfig/mtrmap.json` and is created automatical
 ```json
 {
   "showDepots": true,
-  "port": 1145,
-  "xaeroOverlay": true
+  "port": 1145
 }
 ```
 
@@ -198,7 +197,8 @@ The config file lives at `mods/mapconfig/mtrmap.json` and is created automatical
 | --- | --- |
 | `showDepots` | Whether to display depots |
 | `port` | HTTP server port, defaults to `1145`. If it is taken, the server shifts to the next free port and notifies players in chat with the actual port |
-| `xaeroOverlay` | Whether to overlay the MTR network on the Xaero world map |
+
+The in-game map window reads its tile port straight from squaremap's own config (`httpd.port` in `config/squaremap/config.yml`, default `8080`).
 
 Trip records are persisted to `mods/mapconfig/mtrmap_trips.json` (archived per player UUID; shown and deletable from the web map).
 
@@ -215,7 +215,7 @@ Trip records are persisted to `mods/mapconfig/mtrmap_trips.json` (archived per p
 | GET | `/` | Map page (index.html) |
 | GET | `/style.css`, `/map.js` | Web assets |
 | GET | `/api/data` | Stations / lines / depots / trains as JSON |
-| GET | `/api/overlay` | Network geometry only (smaller payload, for the Xaero overlay) |
+| GET | `/api/overlay` | Network geometry only (smaller payload, for the in-game map window) |
 | GET | `/api/players` | Player positions as JSON |
 | GET | `/api/whoami` | Identifies which online player opened the page, based on the request source IP |
 | POST | `/api/nav` | Web map dispatches a navigation task to a given player |
@@ -251,7 +251,7 @@ It uses a "shell + embedded jars" layout:
 mtrmap/
 ├── src/main/                     # Shared sources (the root node's src is the common module)
 │   ├── java/com/mtrmap/
-│   │   ├── client/               # Shared client logic, navigation HUD, Xaero overlay rendering
+│   │   ├── client/               # Shared client logic, navigation HUD, in-game map window
 │   │   ├── config/               # mtrmap.json read/write
 │   │   ├── mixin/                # Mixin injections (dashboard button, HUD, ...)
 │   │   ├── platform/             # Platform / path abstraction
@@ -262,7 +262,7 @@ mtrmap/
 │       └── mtrmap.mixins.json
 ├── fabric/  forge/  neoforge/    # Loader entry points, event bridges and platform implementations
 ├── versions/                     # One dependency config per MC version (versions/<mc>/gradle.properties)
-├── libs/                         # Local dependency jars (MTR, Xaero; referenced by file name in each version config)
+├── libs/                         # Local dependency jars (MTR, squaremap; referenced by file name in each version config)
 ├── build.gradle                  # Stonecutter centralScript: version nodes and universal jar packaging
 ├── stonecutter.gradle            # Version / loader branch definitions
 └── settings.gradle

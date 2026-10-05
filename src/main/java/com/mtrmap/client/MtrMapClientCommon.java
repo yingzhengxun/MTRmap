@@ -2,6 +2,7 @@ package com.mtrmap.client;
 
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.minecraft.MinecraftProfileTexture;
+import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mtrmap.MtrMapCommon;
 import com.mtrmap.platform.Platform;
@@ -13,6 +14,7 @@ import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.client.resources.SkinManager;
 import net.minecraft.resources.ResourceLocation;
+import org.lwjgl.glfw.GLFW;
 
 import javax.imageio.ImageIO;
 import java.awt.Graphics2D;
@@ -54,9 +56,8 @@ public final class MtrMapClientCommon {
     private MtrMapClientCommon() {
     }
 
-    /** 客户端初始化：启动 Xaero 叠加层数据轮询（未安装 Xaero 时内部会直接跳过）。 */
+    /** 客户端初始化：启动游戏内导航的进度轮询。 */
     public static void init() {
-        com.mtrmap.client.xaero.OverlayData.start();
         com.mtrmap.client.nav.NavController.start();
     }
 
@@ -64,6 +65,8 @@ public final class MtrMapClientCommon {
     public static void onClientTick(Minecraft client) {
         // 导航进度判定 / Ctrl+X 退出（放在最前，断开连接后内部会自行跳过）
         com.mtrmap.client.nav.NavController.onClientTick(client);
+        // F6 打开 / 关闭游戏内地图窗口
+        handleMapKey(client);
         if (client.getConnection() == null || client.level == null) {
             return;
         }
@@ -74,11 +77,36 @@ public final class MtrMapClientCommon {
         processPending(client);
     }
 
+    /**
+     * F6 开关地图窗口。
+     *
+     * <p>用「这一 tick 按下、上一 tick 没按」做边沿判定，避免按住 F6 时窗口疯狂开关；
+     * 只在没有任何界面、或当前界面就是地图窗口时响应（搜索框聚焦时由窗口自己吞掉 F6）。
+     */
+    private static void handleMapKey(Minecraft client) {
+        boolean down = InputConstants.isKeyDown(client.getWindow().getWindow(), GLFW.GLFW_KEY_F6);
+        boolean pressed = down && !f6WasDown;
+        f6WasDown = down;
+        if (!pressed) {
+            return;
+        }
+        if (client.screen instanceof com.mtrmap.client.map.MapScreen) {
+            client.setScreen(null);
+        } else if (client.screen == null) {
+            client.setScreen(new com.mtrmap.client.map.MapScreen());
+        }
+    }
+
+    /** F6 上一 tick 是否按下（边沿判定用） */
+    private static boolean f6WasDown;
+
     /** 断开连接时清空状态。 */
     public static void onDisconnect() {
         SENT.clear();
         PENDING.clear();
         com.mtrmap.client.nav.NavController.onDisconnect();
+        com.mtrmap.client.map.MapDataClient.onDisconnect();
+        f6WasDown = false;
     }
 
     /**

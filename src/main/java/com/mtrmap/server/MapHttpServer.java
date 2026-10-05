@@ -118,7 +118,7 @@ public class MapHttpServer {
 			}
 		});
 
-		// 线网几何端点：供 Xaero 地图叠加层使用（不含列车，体积更小、开销更低）
+		// 线网几何端点：供游戏内地图窗口使用（不含列车，体积更小、开销更低）
 		server.createContext("/api/overlay", exchange -> {
 			try {
 				sendJson(exchange, GSON.toJson(MapDataCollector.collect(minecraftServer, false)));

@@ -28,7 +28,7 @@ architectury {
     fabric()
 }
 
-// 见根 build.gradle：固定 refmap 文件名，供 mtrmap.xaero.mixins.json 引用
+// 见根 build.gradle：固定 refmap 文件名，供 mtrmap.mixins.json 引用
 loom {
     mixin {
         defaultRefmapName = "mtrmap-fabric-refmap.json"
@@ -59,9 +59,8 @@ dependencies {
     // 与 common 使用同一份 MTR 分支产物
     modImplementation rootProject.files("libs/${commonProject.property("deps.mtr_fabric_jar")}")
 
-    // Xaero 世界地图是软联动（可选依赖）：只编译期依赖，是否生效由 XaeroMixinPlugin 决定。
-    // Xaero 自身的类名不做混淆，所以直接用普通 jar。
-    compileOnly rootProject.files("libs/${commonProject.property("deps.xaero_fabric_jar")}")
+    // squaremap 是硬前置（游戏内地图窗口用它渲染的瓦片做底图），编译期依赖它的 Config 读端口。
+    compileOnly rootProject.files("libs/${commonProject.property("deps.squaremap_fabric_jar")}")
 
     common(project(path: commonProject.path, configuration: "namedElements")) { transitive false }
     shadowCommon(project(path: commonProject.path, configuration: "transformProductionFabric")) { transitive false }
@@ -83,9 +82,6 @@ processResources {
     // compatibilityLevel 与根脚本里的 mtrmap.mixins.json 保持一致
     def mixinCompat = "JAVA_17"
     inputs.property "compatibilityLevel", mixinCompat
-    filesMatching("mtrmap.xaero.mixins.json") {
-        expand "compatibilityLevel": mixinCompat
-    }
 }
 
 java {

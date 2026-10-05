@@ -1,6 +1,6 @@
 package com.mtrmap.client.nav;
 
-import com.mtrmap.client.xaero.GuiSink;
+import com.mtrmap.client.render.GuiSink;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 

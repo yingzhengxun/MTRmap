@@ -105,8 +105,8 @@ public class MapDataCollector {
 	}
 
 	/**
-	 * @param includeTrains 是否附带列车数据。Xaero 叠加层只需要线网几何
-	 *                      （车站/线路/车厂），走 /api/overlay 时传 false，
+	 * @param includeTrains 是否附带列车数据。游戏内地图窗口的线网几何
+	 *                      （车站/线路/车厂）走 /api/overlay 时传 false，
 	 *                      可以省掉列车采集的开销。
 	 */
 	public static JsonObject collect(MinecraftServer server, boolean includeTrains) {
@@ -375,7 +375,7 @@ public class MapDataCollector {
 		result.add("routes", routesArray);
 
 		// 统计每个车站被多少条线（合并后的单线）经过：≥2 条即为换乘站。
-		// 网页地图与 Xaero 叠加层都据此把普通圆点改画成跑道形标记。
+		// 网页地图与游戏内地图窗口都据此把普通圆点改画成跑道形标记。
 		Map<Long, Integer> stationLineCount = new HashMap<>();
 		for (JsonElement element : routesArray) {
 			JsonArray ids = element.getAsJsonObject().getAsJsonArray("stations");
@@ -398,7 +398,7 @@ public class MapDataCollector {
 			}
 		}
 
-		// 车厂数据：始终下发，由网页地图的按钮 / Xaero 叠加层的开关各自决定是否显示。
+		// 车厂数据：始终下发，由网页地图的按钮 / 游戏内地图窗口的开关各自决定是否显示。
 		// showDepots 字段仅作为前端的初始默认值。
 		JsonArray depotsArray = new JsonArray();
 		for (DepotInfo depot : depots) {

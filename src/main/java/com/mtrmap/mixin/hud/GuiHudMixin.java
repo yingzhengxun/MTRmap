@@ -1,7 +1,7 @@
 package com.mtrmap.mixin.hud;
 
 import com.mtrmap.client.nav.NavHud;
-import com.mtrmap.client.xaero.GuiSink;
+import com.mtrmap.client.render.GuiSink;
 import net.minecraft.client.gui.Gui;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -26,7 +26,7 @@ import net.minecraft.client.gui.GuiGraphics;
  *   1.21.1 → render(GuiGraphics, DeltaTracker)
  * 用 require = 0 让不匹配的注入安静跳过；真正生效的只有当前版本那一条。
  *
- * 绘制本身走 {@link GuiSink}，与 Xaero 世界地图叠加层共用同一套版本无关封装。
+ * 绘制本身走 {@link GuiSink}，与游戏内地图窗口共用同一套版本无关封装。
  */
 @Mixin(Gui.class)
 public class GuiHudMixin {

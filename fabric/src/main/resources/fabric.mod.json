@@ -19,17 +19,14 @@
     ]
   },
   "mixins": [
-    "mtrmap.mixins.json",
-    "mtrmap.xaero.mixins.json"
+    "mtrmap.mixins.json"
   ],
   "depends": {
     "fabricloader": ">=0.15.11",
     "minecraft": "${minecraft}",
     "java": ">=${java_compat}",
     "fabric": "*",
-    "mtr": "${mtr}"
-  },
-  "suggests": {
-    "xaeroworldmap": "*"
+    "mtr": "${mtr}",
+    "squaremap": "*"
   }
 }

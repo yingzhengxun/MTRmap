@@ -1,5 +1,5 @@
 // 这个脚本是 Stonecutter 的「中心脚本」：每个版本节点都会执行一次。
-// 根节点的 src/ 就是 common（与加载器无关的服务端逻辑、网页资源、Xaero 叠加层）。
+// 根节点的 src/ 就是 common（与加载器无关的服务端逻辑、网页资源、游戏内地图窗口）。
 plugins {
     id "dev.architectury.loom"
     id "architectury-plugin"
@@ -55,6 +55,10 @@ dependencies {
     // MTR 各版本分支的产物都是生产 jar（intermediary 命名），必须经 Loom 重映射成 official
     // 才能被（以官方映射编译的）common 代码引用。用 compileOnly 会直接报找不到 net.minecraft.class_xxxx。
     modImplementation rootProject.files("libs/${property("deps.mtr_fabric_jar")}")
+
+    // squaremap 是硬前置：游戏内地图窗口以它的瓦片做底图。这里只用于编译期引用它的
+    // Config 类读取 Web 端口；运行期由加载器保证它在，读不到时回退解析 config.yml。
+    compileOnly rootProject.files("libs/${property("deps.squaremap_fabric_jar")}")
 }
 
 // mod 的 jar 根目录必须有 pack.mcmeta，否则 Forge 会报
@@ -138,6 +142,7 @@ if (bridgePlatformPaths.size() >= 2 && project.path == ":${mc}") {
     def mcDepFabric = property("mod.mc_dep_fabric").toString()
     def mcDepForgelike = property("mod.mc_dep_forgelike").toString()
     def mtrDep = property("mod.mtr_dep").toString()
+    def squaremapDep = "*"
     def fabricLoader = property("deps.fabric_loader").toString()
     def hasForge = platforms.contains("forge")
     def hasNeoForge = platforms.contains("neoforge")
@@ -158,6 +163,7 @@ if (bridgePlatformPaths.size() >= 2 && project.path == ":${mc}") {
         inputs.property "mcDepFabric", mcDepFabric
         inputs.property "mcDepForgelike", mcDepForgelike
         inputs.property "mtrDep", mtrDep
+        inputs.property "squaremapDep", squaremapDep
         inputs.property "fabricLoader", fabricLoader
         inputs.property "fmlLoaderVersion", fmlLoaderVersion
         inputs.property "neoforgeVersion", neoforgeVersion
@@ -203,7 +209,8 @@ if (bridgePlatformPaths.size() >= 2 && project.path == ":${mc}") {
   "depends": {
     "fabricloader": ">=${fabricLoader}",
     "minecraft": "${mcDepFabric}",
-    "java": ">=${javaRelease}"
+    "java": ">=${javaRelease}",
+    "squaremap": "${squaremapDep}"
   }
 }
 """)
@@ -227,6 +234,13 @@ description = '''
 modId = "mtr"
 mandatory = true
 versionRange = "${mtrDep}"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.${bridgeId}]]
+modId = "squaremap"
+mandatory = true
+versionRange = "${squaremapDep}"
 ordering = "AFTER"
 side = "BOTH"
 
@@ -265,6 +279,13 @@ description = '''
 modId = "mtr"
 type = "required"
 versionRange = "${mtrDep}"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.${bridgeId}]]
+modId = "squaremap"
+type = "required"
+versionRange = "${squaremapDep}"
 ordering = "AFTER"
 side = "BOTH"
 

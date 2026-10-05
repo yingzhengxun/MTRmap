@@ -1,10 +1,11 @@
-package com.mtrmap.client.xaero;
+package com.mtrmap.client.render;
 
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.gui.Font;
 //? if >=1.20.1 {
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.resources.ResourceLocation;
 import org.joml.Matrix4f;
 //?} else if >=1.17 {
 /*import com.mojang.blaze3d.systems.RenderSystem;
@@ -31,7 +32,7 @@ import com.mojang.math.Matrix4f;
  *
  * 1.20.1 起有 {@code GuiGraphics}，它已经打包了 PoseStack、MultiBufferSource 与文字绘制；
  * 1.19.2 没有这个类，只能拿到 {@code PoseStack}，所以这里用一个薄封装把差异挡在内部，
- * 让 {@link OverlayRenderer} 与 Xaero 叠加层 mixin 的绘制代码在两端共用同一份。
+ * 让 HUD 导航面板与游戏内地图窗口的绘制代码在两端共用同一份。
  *
  * 调用约定：先连续写四边形，最后 {@link #flush()} 一次统一提交；
  * 文字绘制（{@link #text}）会自行保证之前排队的四边形已经提交。
@@ -80,6 +81,51 @@ public final class GuiSink {
 	/** 以 {@code centerX} 为水平中心画一行文字 */
 	public void text(Font font, String text, float centerX, float y, int color, boolean shadow) {
 		gg.drawString(font, text, Math.round(centerX - font.width(text) / 2f), Math.round(y), color, shadow);
+	}
+
+	/** 左对齐画一行文字 */
+	public void textLeft(Font font, String text, float left, float y, int color, boolean shadow) {
+		gg.drawString(font, text, Math.round(left), Math.round(y), color, shadow);
+	}
+
+	/**
+	 * 画一张整图（如 squaremap 瓦片）。缩放交给调用方用 push/translate/scale 处理，
+	 * 这里只负责把整张纹理铺满目标矩形。
+	 */
+	public void texture(ResourceLocation texture, float x, float y, float w, float h) {
+		int iw = Math.max(1, Math.round(w));
+		int ih = Math.max(1, Math.round(h));
+		gg.blit(texture, Math.round(x), Math.round(y), iw, ih, 0f, 0f, iw, ih, iw, ih);
+	}
+
+	/** 半透明遮罩：给整块区域压一层暗色（模态弹窗用） */
+	public void dim(int width, int height, int color) {
+		gg.fill(0, 0, width, height, color);
+	}
+
+	/**
+	 * 任意四边形（顶点按顺序）。地图上的粗线就是用它把一条线段一次性画成一个四边形，
+	 * 而不是逐像素点填空 —— 线网动辄上千个点，逐像素那套会直接把帧率拖垮。
+	 */
+	public void quad(float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4, int color) {
+		float a = ((color >>> 24) & 0xFF) / 255f;
+		float r = ((color >> 16) & 0xFF) / 255f;
+		float g = ((color >> 8) & 0xFF) / 255f;
+		float b = (color & 0xFF) / 255f;
+		Matrix4f m = matrix();
+		VertexConsumer vc = vertices();
+		// 1.21 起 VertexConsumer 的顶点接口改名为 addVertex / setColor（旧的 vertex/color 已移除）
+		//? if >=1.21.1 {
+		/*vc.addVertex(m, x1, y1, 0f).setColor(r, g, b, a);
+		vc.addVertex(m, x2, y2, 0f).setColor(r, g, b, a);
+		vc.addVertex(m, x3, y3, 0f).setColor(r, g, b, a);
+		vc.addVertex(m, x4, y4, 0f).setColor(r, g, b, a);
+		*///?} else {
+		vc.vertex(m, x1, y1, 0f).color(r, g, b, a).endVertex();
+		vc.vertex(m, x2, y2, 0f).color(r, g, b, a).endVertex();
+		vc.vertex(m, x3, y3, 0f).color(r, g, b, a).endVertex();
+		vc.vertex(m, x4, y4, 0f).color(r, g, b, a).endVertex();
+		//?}
 	}
 	//?} else if >=1.19 {
 	/*private final PoseStack pose;

@@ -16,13 +16,17 @@ description = '''
 [[mixins]]
 config = "mtrmap.mixins.json"
 
-[[mixins]]
-config = "mtrmap.xaero.mixins.json"
-
 [[dependencies.${id}]]
 modId = "mtr"
 type = "required"
 versionRange = "${mtr}"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.${id}]]
+modId = "squaremap"
+type = "required"
+versionRange = "*"
 ordering = "AFTER"
 side = "BOTH"
 

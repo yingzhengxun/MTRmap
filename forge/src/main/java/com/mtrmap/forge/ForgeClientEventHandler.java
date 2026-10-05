@@ -25,7 +25,7 @@ public final class ForgeClientEventHandler {
         if (event.phase == TickEvent.Phase.END) {
             if (!clientInitialized) {
                 clientInitialized = true;
-                // 启动客户端通用逻辑（Xaero 叠加层数据轮询；未装 Xaero 时内部会直接跳过）。
+                // 启动客户端通用逻辑（导航轮询、游戏内地图窗口的 F6 按键监听）。
                 // 这里懒加载而非 FMLClientSetupEvent：本类挂的是 FORGE 事件总线，
                 // 而 FMLClientSetupEvent 走 MOD 总线，两者不通用。
                 MtrMapClientCommon.init();
