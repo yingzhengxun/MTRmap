@@ -2696,7 +2696,7 @@
 		}
 	}
 
-	/** 线路高亮：先铺一层金色光晕，再用线路本色盖回去 */
+	/** 线路高亮：金色荧光垫底，再用线路本色描边并带一圈本色荧光 */
 	function highlightRoute(route) {
 		const stations = route.stations || [];
 		const paths = route.paths || [];
@@ -2727,15 +2727,25 @@
 				ctx.stroke();
 			}
 		};
-		stroke(base * 3, 'rgba(255, 208, 64, 0.45)');
+		ctx.save();
+		// 荧光：金色光晕垫底，本色线再带一圈本色发光
+		ctx.shadowColor = 'rgba(255, 208, 64, 0.95)';
+		ctx.shadowBlur = Math.max(16, base * 5);
+		stroke(base * 3, 'rgba(255, 208, 64, 0.35)');
+		ctx.shadowColor = intToRgba(route.color, 0.95);
+		ctx.shadowBlur = Math.max(10, base * 3);
 		stroke(base + 1.5, intToRgba(route.color, 1));
+		ctx.restore();
 	}
 
-	/** 车站高亮：金色双环 */
+	/** 车站高亮：金色荧光双环 */
 	function highlightStation(st) {
 		const p = worldToCanvas(st.x, st.z);
 		const r = Math.max(6, 8 * Math.sqrt(scale));
 		ctx.save();
+		// 荧光：给环描边加一层发光
+		ctx.shadowColor = 'rgba(255, 216, 80, 0.95)';
+		ctx.shadowBlur = Math.max(14, r * 2.2);
 		ctx.beginPath();
 		ctx.arc(p.x, p.y, r + 5, 0, Math.PI * 2);
 		ctx.strokeStyle = 'rgba(255, 208, 64, 0.45)';

@@ -53,7 +53,7 @@ public class MapHttpServer {
 	}
 
 	/** 端口被占用时最多往后顺延多少个端口 */
-	private static final int MAX_PORT_ATTEMPTS = 64;
+	public static final int MAX_PORT_ATTEMPTS = 64;
 
 	/**
 	 * 启动 HTTP 服务器。

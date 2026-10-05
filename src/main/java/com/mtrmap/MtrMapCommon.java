@@ -59,7 +59,9 @@ public final class MtrMapCommon {
     /** 端口顺延：配置端口与最终实际端口（相等或不曾启动时为 -1 表示无需提示） */
     private static int portShiftFrom = -1;
     private static int portShiftTo = -1;
-    /** 已经收到过端口顺延提示的玩家，避免每 tick 重复刷屏 */
+    /** 连顺延的余地都没有、服务完全起不来时记下配置端口（-1 表示没有这种情况） */
+    private static int portFailedPort = -1;
+    /** 已经收到过端口提示的玩家，避免每 tick 重复刷屏 */
     private static final java.util.Set<UUID> portNoticeSent = new java.util.HashSet<>();
 
     private MtrMapCommon() {
@@ -82,6 +84,7 @@ public final class MtrMapCommon {
         MapDataCollector.captureRailwayData(server);
         portShiftFrom = -1;
         portShiftTo = -1;
+        portFailedPort = -1;
         portNoticeSent.clear();
         try {
             int configuredPort = MtrMapConfig.getPort();
@@ -97,7 +100,10 @@ public final class MtrMapCommon {
                 LOGGER.info("MTR Map HTTP 服务器已启动于 http://localhost:{}", port);
             }
         } catch (Exception e) {
-            LOGGER.error("MTR Map HTTP 服务器启动失败", e);
+            // 顺延范围内的端口全部被占用：服务起不来，同样等玩家进游戏后提示一次
+            portFailedPort = MtrMapConfig.getPort();
+            LOGGER.error("MTR Map HTTP 服务器启动失败：{} 端口以后的 {} 个端口都不可用",
+                    portFailedPort, MapHttpServer.MAX_PORT_ATTEMPTS, e);
         }
     }
 
@@ -112,6 +118,7 @@ public final class MtrMapCommon {
         MtrMapConfig.setActivePort(0);
         portShiftFrom = -1;
         portShiftTo = -1;
+        portFailedPort = -1;
         portNoticeSent.clear();
         currentServer = null;
         NavTaskStore.clear();
@@ -122,21 +129,30 @@ public final class MtrMapCommon {
     /** 每个 tick 末更新玩家位置。 */
     public static void onServerTick(MinecraftServer server) {
         PlayerTracker.update(server);
-        notifyPortShift(server);
+        notifyPortStatus(server);
     }
 
     /**
-     * 端口被占用而顺延时，在玩家进游戏后往消息栏发一条提示。
+     * 端口出问题时（顺延了、或顺延范围内全被占满导致服务起不来），
+     * 在玩家进游戏后往消息栏发一条提示。
      *
-     * <p>顺延发生在服务器启动那一刻，那时通常没有玩家在线，所以要等玩家进来时补发；
+     * <p>这些情况都发生在服务器启动那一刻，那时通常没有玩家在线，所以要等玩家进来时补发；
      * 每位玩家只提示一次。
      */
-    private static void notifyPortShift(MinecraftServer server) {
-        if (portShiftTo < 0 || portShiftTo == portShiftFrom) {
+    private static void notifyPortStatus(MinecraftServer server) {
+        boolean failed = portFailedPort >= 0;
+        boolean shifted = portShiftTo >= 0 && portShiftTo != portShiftFrom;
+        if (!failed && !shifted) {
             return;
         }
         for (net.minecraft.server.level.ServerPlayer player : server.getPlayerList().getPlayers()) {
-            if (portNoticeSent.add(player.getUUID())) {
+            if (!portNoticeSent.add(player.getUUID())) {
+                continue;
+            }
+            if (failed) {
+                player.sendSystemMessage(literal("§c[MTR Map] " + portFailedPort + "端口以后的 "
+                        + MapHttpServer.MAX_PORT_ATTEMPTS + " 个端口已被占满，地图服务无法开启！"));
+            } else {
                 player.sendSystemMessage(literal("§e[MTR Map] 端口 " + portShiftFrom + " 已被占用，"
                         + "地图服务已顺延到 " + portShiftTo + "，请访问 http://localhost:" + portShiftTo));
             }

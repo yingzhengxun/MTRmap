@@ -125,6 +125,8 @@ html, body {
 /* ===== 左上角搜索框 ===== */
 #searchBox {
 	position: relative;
+	/* 盖住下面的用户卡片，否则头像和用户名会挡住候选词 */
+	z-index: 2;
 	width: 280px;
 	max-width: 100%;
 	padding: 6px;
@@ -953,6 +955,7 @@ body.route-mode #controls {
 /* ===== 左上角用户卡片（头像 + 用户名）===== */
 #userCard {
 	position: relative;
+	z-index: 1;
 	align-self: flex-start;
 	font-size: 13px;
 }
