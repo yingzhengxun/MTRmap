@@ -5,8 +5,11 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 
 /**
- * 游戏内导航 HUD：把网页「路径查询」的结果精简成一块面板，贴在屏幕右侧
- * （小地图旁边），黑底白字，当前进行的任务用灰底高亮。
+ * 游戏内导航 HUD：把网页「路径查询」的结果精简成一块面板，贴在游戏窗口右上角，
+ * 黑底白字，当前进行的任务用灰底高亮。
+ *
+ * <p>位置每帧按 {@code guiScaledWidth/Height} 重新计算，窗口移动、缩放（含全屏切换）
+ * 时面板始终贴着窗口右上角。
  *
  * 动画：任务刚到时整块淡入；一步完成切到下一步时，灰色高亮条从上一行
  * 平滑滑到新的一行（260ms，easeOut），不会生硬跳变。
@@ -17,8 +20,12 @@ import net.minecraft.client.gui.Font;
 public final class NavHud {
 
     private static final int PANEL_W = 196;
-    private static final int PAD = 7;
-    private static final int ROW_H = 24;
+    private static final int PAD = 6;
+    private static final int ROW_H = 22;
+    /** 距窗口边缘的留白（缩放前的逻辑像素） */
+    private static final int MARGIN = 8;
+    /** 整块面板的缩放系数：让导航窗口比原来小一圈 */
+    private static final float SCALE = 0.78f;
     /** 高亮切换动画时长（毫秒） */
     private static final float ANIM_MS = 260f;
 
@@ -83,14 +90,19 @@ public final class NavHud {
         int headLines = 3;                                  // 标题 + 起终点 + 概要
         int contentH = headLines * 10 + stepCount * ROW_H + 14;
         int panelH = contentH + PAD * 2;
-        int x = guiW - PANEL_W - 6;
-        int y = Math.max(6, (guiH - panelH) / 2 - guiH / 6);
-        if (y + panelH > guiH - 6) {
-            y = Math.max(6, guiH - panelH - 6);
-        }
 
         sink.push();
         sink.translate(0f, 0f, 300f);
+        // 面板整体按逻辑像素布局，最后统一缩放；窗口尺寸每帧都会读到，
+        // 所以窗口一动（缩放/全屏）面板就跟着贴回右上角。
+        sink.scale(SCALE);
+        int logicalW = Math.round(guiW / SCALE);
+        int logicalH = Math.round(guiH / SCALE);
+        int x = logicalW - PANEL_W - MARGIN;
+        int y = MARGIN;
+        if (y + panelH > logicalH - MARGIN) {
+            y = Math.max(MARGIN, logicalH - panelH - MARGIN);
+        }
 
         // 面板底 + 边框
         sink.fill(x, y, x + PANEL_W, y + panelH, applyAlpha(BG, titleAlpha));
