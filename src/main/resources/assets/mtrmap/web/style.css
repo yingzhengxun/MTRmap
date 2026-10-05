@@ -109,7 +109,7 @@ html, body {
 	cursor: grabbing;
 }
 
-/* 左上角竖向堆叠：搜索框 → 用户卡片 → 状态图例 */
+/* 左上角竖向堆叠：搜索框 → 用户卡片 → 状态图例 → 线路一览 */
 #leftStack {
 	position: absolute;
 	top: 10px;
@@ -119,7 +119,6 @@ html, body {
 	align-items: flex-start;
 	gap: 8px;
 	z-index: 60;
-	max-width: 300px;
 }
 
 /* ===== 左上角搜索框 ===== */
@@ -239,13 +238,75 @@ html, body {
 
 #infoPanel {
 	position: static;
-	max-width: 100%;
+	max-width: 320px;
 	background: var(--panel-bg);
 	padding: 12px 16px;
 	border-radius: 8px;
 	border: 1px solid var(--border-color);
 	font-size: 13px;
 	transition: background 0.3s, border-color 0.3s;
+}
+
+/* ===== 左上角线路一览：左边标识色直线 + 三行文字，每排最多四个 ===== */
+#lineList {
+	display: grid;
+	/* 列数由脚本按线路条数设置（最多 4 列） */
+	grid-template-columns: repeat(4, minmax(0, max-content));
+	gap: 8px 14px;
+	width: max-content;
+	max-width: min(560px, calc(100vw - 20px));
+	max-height: 40vh;
+	overflow-y: auto;
+	padding: 10px 12px;
+	border-radius: 8px;
+	border: 1px solid var(--border-color);
+	background: var(--panel-bg);
+	transition: background 0.3s, border-color 0.3s;
+}
+
+#lineList:empty {
+	display: none;
+}
+
+.line-item {
+	display: flex;
+	gap: 8px;
+	min-width: 0;
+}
+
+/* 标识色直线 */
+.line-item-bar {
+	flex: 0 0 auto;
+	width: 4px;
+	border-radius: 2px;
+}
+
+.line-item-text {
+	display: block;
+	min-width: 0;
+}
+
+.line-item-name,
+.line-item-sub,
+.line-item-ends {
+	display: block;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.line-item-name {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--text-color);
+	transition: color 0.3s;
+}
+
+.line-item-sub,
+.line-item-ends {
+	font-size: 10px;
+	color: var(--label-color);
+	transition: color 0.3s;
 }
 
 #status {

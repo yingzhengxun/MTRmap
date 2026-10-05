@@ -310,6 +310,7 @@
 	let detailLang = 'zh';      // 侧边栏站名用中文还是英文（没有译名时回退本名）
 	let searchMatches = [];     // 当前候选词
 	let searchActiveIndex = -1; // 键盘上下键选中的候选词
+	let lineListSignature = ''; // 线路一览的签名，用来判断要不要重绘
 
 	// ===== i18n 工具 =====
 	function t(key, replacements) {
@@ -394,6 +395,7 @@
 	const detailBody = document.getElementById('detailBody');
 	const detailLangBtn = document.getElementById('detailLangBtn');
 	const detailCloseBtn = document.getElementById('detailCloseBtn');
+	const lineListEl = document.getElementById('lineList');
 
 	function applyTheme() {
 		document.body.classList.toggle('light-mode', !isDarkMode);
@@ -729,6 +731,7 @@
 			if (mapData.stations) {
 				mapData.stations.forEach(s => { stationMap[s.id] = s; });
 			}
+			renderLineList();
 			updateStatus();
 			if (!viewInitialized) fitView();
 		} catch (e) {
@@ -2497,6 +2500,36 @@
 	ticketPrint.addEventListener('click', () => { printTicket(); });
 	ticketCancel.addEventListener('click', () => { ticketDialog.style.display = 'none'; });
 	ticketOverlay.addEventListener('click', () => { ticketDialog.style.display = 'none'; });
+
+	// ===== 左上角线路一览 =====
+	// 每条线路：左边一条标识色直线，右边三行（主名称 / 外语副名 / 起点站~终点站），
+	// 后两行字号更小；网格固定四列，每排最多四个。
+	function renderLineList() {
+		const routes = mapData.routes || [];
+		// 线路没变化就不重画（数据每秒刷新，但线网是静态的）
+		const signature = routes.map(r => r.id + ':' + r.name).join(',');
+		if (signature === lineListSignature) return;
+		lineListSignature = signature;
+		// 每排最多四个：列数按线路条数收缩，线路少时面板不会空出一大片
+		lineListEl.style.gridTemplateColumns =
+			'repeat(' + Math.min(4, Math.max(1, routes.length)) + ', minmax(0, max-content))';
+
+		lineListEl.innerHTML = routes.map(route => {
+			const n = splitName(route.name);
+			const ids = route.stations || [];
+			const from = ids.length ? splitName((stationMap[ids[0]] || {}).name).main : '';
+			const to = ids.length ? splitName((stationMap[ids[ids.length - 1]] || {}).name).main : '';
+			const ends = from && to ? from + '~' + to : '';
+			return '<div class="line-item" title="' + escapeHtml(n.main) + '">' +
+				'<span class="line-item-bar" style="background:' + intToRgba(route.color, 1) + '"></span>' +
+				'<span class="line-item-text">' +
+					'<span class="line-item-name">' + escapeHtml(n.main) + '</span>' +
+					(n.trans ? '<span class="line-item-sub">' + escapeHtml(n.trans) + '</span>' : '') +
+					(ends ? '<span class="line-item-ends">' + escapeHtml(ends) + '</span>' : '') +
+				'</span>' +
+			'</div>';
+		}).join('');
+	}
 
 	// ===== 搜索 / 右侧详情侧边栏 =====
 	/** 侧边栏里显示的名称：按 detailLang 选，没有译名时回退本名 */
