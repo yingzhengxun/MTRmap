@@ -13,6 +13,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import org.lwjgl.glfw.GLFW;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -89,10 +90,22 @@ public class MapScreen extends Screen {
 	private boolean tripsLoading;
 	private JsonArray trips = new JsonArray();
 
+	/** 导出图片弹窗 */
+	private boolean exportOpen;
+	private boolean exporting;
+	private String exportFormat = "png";
+	private int exportQuality = 92;
+	private boolean qualityDragging;
+
+	/** 保存结果提示 */
+	private String toastText;
+	private int toastColor = 0xFF9BE59B;
+	private long toastUntil;
+
 	private static final int PAD = 6;
 	private static final int ROW = 18;
-	/** 工具栏按钮边长：10 个按钮竖排，要保证在小窗口（GUI 缩放 4）里也放得下 */
-	private static final int TOOL_W = 22;
+	/** 工具栏按钮边长：11 个按钮竖排，要保证在小窗口（GUI 缩放 4）里也放得下 */
+	private static final int TOOL_W = 20;
 
 	public MapScreen() {
 		super(Component.translatable("key.mtrmap.map_title"));
@@ -229,8 +242,10 @@ public class MapScreen extends Screen {
 		if (hoverText != null) {
 			drawTooltip(sink, hoverText, (int) hoverX, (int) hoverY);
 		}
-		// 行程记录是模态弹窗，画在最上层
+		// 行程记录 / 导出弹窗画在最上层
 		drawTripsDialog(sink);
+		drawExportDialog(sink);
+		drawToast(sink);
 		// 不调用 super.render：原版 Screen.render 会画一遍背景/组件，把地图盖掉。
 		// 本窗口没有任何原版控件，绘制全部由上面的 GuiSink 完成。
 	}
@@ -668,7 +683,7 @@ public class MapScreen extends Screen {
 	private List<Btn> toolbarButtons() {
 		List<Btn> buttons = new ArrayList<>();
 		int x = width - 8 - TOOL_W;
-		int totalRows = 10;
+		int totalRows = 11;
 		int gap = 2;
 		int totalH = totalRows * (TOOL_W + gap) - gap;
 		int y = (height - totalH) / 2;
@@ -677,6 +692,8 @@ public class MapScreen extends Screen {
 		buttons.add(new Btn("theme", x, y, dark ? "☾" : "☀", s("夜间模式", "Night mode"), false));
 		y += TOOL_W + gap;
 		buttons.add(new Btn("lang", x, y, "EN", s("English", "中文"), english));
+		y += TOOL_W + gap;
+		buttons.add(new Btn("export", x, y, "↓", s("导出图片", "Export image"), false));
 		y += TOOL_W + gap;
 		buttons.add(new Btn("depot", x, y, "▣", s("显示/隐藏车厂", "Toggle depots"), showDepots));
 		y += TOOL_W + gap;
@@ -911,12 +928,15 @@ public class MapScreen extends Screen {
 				String status = "completed".equals(str(trip, "status"))
 						? s("已完成", "Completed") : s("已停止", "Stopped");
 				String title = status + "  " + tripPointName(trip, "from") + " → " + tripPointName(trip, "to");
-				sink.textLeft(font, fit(title, TRIPS_W - 62), x + 8, ry + 3, textColor(), false);
+				sink.textLeft(font, fit(title, TRIPS_W - 104), x + 8, ry + 3, textColor(), false);
 				String meta = fmtDist(num(trip, "dist")) + s(" · 约", " · ~") + fmtMinutes(num(trip, "timeSec"))
 						+ s(" · 换乘 ", " · transfers ") + (int) num(trip, "transfers");
-				sink.textLeft(font, fit(meta, TRIPS_W - 62), x + 8, ry + 16, dimColor(), false);
-				sink.fill(x + TRIPS_W - 46, ry + 6, x + TRIPS_W - 8, ry + 24, dark ? 0xFF4A2A2A : 0xFFF0D6D6);
-				sink.text(font, s("删除", "Del"), x + TRIPS_W - 27f, ry + 11, textColor(), false);
+				sink.textLeft(font, fit(meta, TRIPS_W - 104), x + 8, ry + 16, dimColor(), false);
+				// 票根（只保存，不打印）
+				sink.fill(x + TRIPS_W - 86, ry + 6, x + TRIPS_W - 48, ry + 24, dark ? 0xFF2A3A4A : 0xFFD6E4F0);
+				sink.text(font, s("票根", "Ticket"), x + TRIPS_W - 67f, ry + 11, textColor(), false);
+				sink.fill(x + TRIPS_W - 44, ry + 6, x + TRIPS_W - 6, ry + 24, dark ? 0xFF4A2A2A : 0xFFF0D6D6);
+				sink.text(font, s("删除", "Del"), x + TRIPS_W - 25f, ry + 11, textColor(), false);
 			}
 		}
 		int by = y + h - 22;
@@ -942,18 +962,40 @@ public class MapScreen extends Screen {
 			tripsOpen = false;
 			return true;
 		}
-		if (!tripsLoading && mouseX >= x + TRIPS_W - 46 && mouseX <= x + TRIPS_W - 8) {
+		if (!tripsLoading && mouseY >= y + 26 && mouseY <= y + 26 + tripsRows() * TRIPS_ROW_H) {
 			int cy = y + 26;
 			for (int i = 0; i < tripsRows(); i++) {
 				int ry = cy + i * TRIPS_ROW_H;
-				if (mouseY >= ry + 6 && mouseY <= ry + 24) {
-					deleteTrip(str(trips.get(i).getAsJsonObject(), "id"));
+				if (mouseY < ry + 6 || mouseY > ry + 24) {
+					continue;
+				}
+				JsonObject trip = trips.get(i).getAsJsonObject();
+				if (mouseX >= x + TRIPS_W - 86 && mouseX <= x + TRIPS_W - 48) {
+					saveTicket(trip);
+					return true;
+				}
+				if (mouseX >= x + TRIPS_W - 44 && mouseX <= x + TRIPS_W - 6) {
+					deleteTrip(str(trip, "id"));
 					return true;
 				}
 			}
 		}
 		// 模态：点空白处也不穿透到地图
 		return true;
+	}
+
+	/** 生成纪念票根并直接保存（不做打印） */
+	private void saveTicket(JsonObject trip) {
+		try {
+			File file = MapExporter.saveTicket(trip, english);
+			if (file == null) {
+				showToast(s("票根保存失败", "Failed to save ticket"), 0xFFFF8080);
+			} else {
+				showToast(s("票根已保存到 ", "Ticket saved to ") + relative(file), 0xFF9BE59B);
+			}
+		} catch (Throwable t) {
+			showToast(s("票根保存失败", "Failed to save ticket"), 0xFFFF8080);
+		}
 	}
 
 	private void loadTrips() {
@@ -1022,6 +1064,172 @@ public class MapScreen extends Screen {
 		} catch (Exception e) {
 			return 0;
 		}
+	}
+
+	// ===== 导出图片弹窗 =====
+
+	private static final int EXPORT_W = 240;
+
+	private int exportDialogHeight() {
+		return 26 + 26 + ("jpg".equals(exportFormat) ? 24 : 0) + 26;
+	}
+
+	private int exportDialogY() {
+		return Math.max(8, (height - exportDialogHeight()) / 2);
+	}
+
+	private int exportFormatButtonX(int index) {
+		int bw = 60;
+		int gap = 6;
+		return (width - EXPORT_W) / 2 + (EXPORT_W - (2 * bw + gap)) / 2 + index * (bw + gap);
+	}
+
+	private void drawExportDialog(GuiSink sink) {
+		if (!exportOpen) {
+			return;
+		}
+		sink.dim(width, height, 0x99000000);
+		int x = (width - EXPORT_W) / 2;
+		int y = exportDialogY();
+		int h = exportDialogHeight();
+		panel(sink, x, y, EXPORT_W, h);
+		sink.textLeft(font, s("导出图片", "Export image"), x + 8, y + 8, textColor(), false);
+		sink.textLeft(font, "×", x + EXPORT_W - 14, y + 8, dimColor(), false);
+
+		int by = y + 26;
+		String[] formats = {"png", "jpg"};
+		String[] labels = {"PNG", "JPG"};
+		for (int i = 0; i < formats.length; i++) {
+			boolean active = formats[i].equals(exportFormat);
+			int bx = exportFormatButtonX(i);
+			sink.fill(bx, by, bx + 60, by + 20, active ? 0xFF3B5180 : (dark ? 0xFF2A2A3C : 0xFFE4E4EC));
+			border(sink, bx, by, 60, 20, dark ? 0xFF3A3A4A : 0xFFBBBBCC);
+			sink.text(font, labels[i], bx + 30f, by + 6, textColor(), false);
+		}
+
+		if ("jpg".equals(exportFormat)) {
+			int qy = y + 52;
+			sink.textLeft(font, s("质量:", "Quality:"), x + 8, qy + 3, dimColor(), false);
+			int trackX = x + 54;
+			int trackW = 122;
+			sink.fill(trackX, qy + 6, trackX + trackW, qy + 10, dark ? 0xFF2A2A3C : 0xFFD8D8E0);
+			int filled = (int) Math.round(trackW * (exportQuality - 1) / 99.0);
+			sink.fill(trackX, qy + 6, trackX + filled, qy + 10, 0xFF3B6FD4);
+			sink.fill(trackX + filled - 1, qy + 3, trackX + filled + 1, qy + 13, 0xFFFFFFFF);
+			sink.textLeft(font, exportQuality + "%", trackX + trackW + 6, qy + 3, textColor(), false);
+		}
+
+		int cy = y + h - 24;
+		int cancelX = x + EXPORT_W / 2 - 40;
+		sink.fill(cancelX, cy, cancelX + 80, cy + 18, dark ? 0xFF2A2A3C : 0xFFE4E4EC);
+		border(sink, cancelX, cy, 80, 18, dark ? 0xFF3A3A4A : 0xFFBBBBCC);
+		sink.text(font, s("取消", "Cancel"), cancelX + 40f, cy + 5, textColor(), false);
+	}
+
+	/** 导出弹窗的点击；返回 true 表示已处理（模态） */
+	private boolean exportDialogClick(double mouseX, double mouseY) {
+		if (!exportOpen) {
+			return false;
+		}
+		int x = (width - EXPORT_W) / 2;
+		int y = exportDialogY();
+		int h = exportDialogHeight();
+		if (mouseX >= x + EXPORT_W - 24 && mouseX <= x + EXPORT_W && mouseY >= y && mouseY <= y + 22) {
+			exportOpen = false;
+			return true;
+		}
+		int by = y + 26;
+		if (mouseY >= by && mouseY <= by + 20) {
+			for (int i = 0; i < 2; i++) {
+				int bx = exportFormatButtonX(i);
+				if (mouseX >= bx && mouseX <= bx + 60) {
+					exportFormat = i == 0 ? "png" : "jpg";
+					// 与网页一致：选好格式就直接开始导出
+					startExport();
+					return true;
+				}
+			}
+		}
+		if ("jpg".equals(exportFormat)) {
+			int qy = y + 52;
+			int trackX = x + 54;
+			int trackW = 122;
+			if (mouseX >= trackX - 4 && mouseX <= trackX + trackW + 4 && mouseY >= qy && mouseY <= qy + 16) {
+				qualityDragging = true;
+				updateQuality(mouseX, trackX, trackW);
+				return true;
+			}
+		}
+		int cy = y + h - 24;
+		int cancelX = x + EXPORT_W / 2 - 40;
+		if (mouseY >= cy && mouseY <= cy + 18 && mouseX >= cancelX && mouseX <= cancelX + 80) {
+			exportOpen = false;
+			return true;
+		}
+		// 模态：点空白处不穿透
+		return true;
+	}
+
+	private void updateQuality(double mouseX, int trackX, int trackW) {
+		double ratio = (mouseX - trackX) / (double) trackW;
+		exportQuality = (int) Math.round(1 + Math.max(0, Math.min(1, ratio)) * 99);
+	}
+
+	/** 在后台线程导出（要下瓦片 + 编码，不能卡住渲染线程） */
+	private void startExport() {
+		if (exporting) {
+			return;
+		}
+		final MapModel model = MapDataClient.model();
+		final boolean depots = showDepots;
+		final boolean darkMode = dark;
+		final boolean en = english;
+		final String format = exportFormat;
+		final int quality = exportQuality;
+		exporting = true;
+		exportOpen = false;
+		Thread thread = new Thread(() -> {
+			File file = MapExporter.exportMap(model, depots, darkMode, en, format, quality);
+			Minecraft.getInstance().execute(() -> {
+				exporting = false;
+				if (file == null) {
+					showToast(s("导出失败：没有可导出的数据", "Export failed: no data"), 0xFFFF8080);
+				} else {
+					showToast(s("已保存到 ", "Saved to ") + relative(file), 0xFF9BE59B);
+				}
+			});
+		}, "MTRMap-Export");
+		thread.setDaemon(true);
+		thread.start();
+	}
+
+	// ===== 提示条 =====
+
+	private void showToast(String text, int color) {
+		toastText = text;
+		toastColor = color;
+		toastUntil = System.currentTimeMillis() + 4000L;
+	}
+
+	private void drawToast(GuiSink sink) {
+		if (toastText == null) {
+			return;
+		}
+		if (System.currentTimeMillis() > toastUntil) {
+			toastText = null;
+			return;
+		}
+		int w = font.width(toastText) + 20;
+		int x = (width - w) / 2;
+		int y = height - 36;
+		sink.fill(x, y, x + w, y + 20, 0xE6000000);
+		border(sink, x, y, w, 20, toastColor);
+		sink.text(font, toastText, x + w / 2f, y + 6, 0xFFFFFFFF, false);
+	}
+
+	/** 把绝对路径缩成「mtrmap/xxx.png」，提示里更短更清楚 */
+	private static String relative(File file) {
+		return "mtrmap/" + file.getName();
 	}
 
 	// ===== 选站 / 搜索 =====
@@ -1309,7 +1517,11 @@ public class MapScreen extends Screen {
 
 	@Override
 	public boolean mouseClicked(double mouseX, double mouseY, int button) {
-		// 行程记录是模态弹窗：开着的时候所有点击都只给它
+		// 导出 / 行程记录都是模态弹窗：开着的时候所有点击都只给它
+		if (exportOpen) {
+			exportDialogClick(mouseX, mouseY);
+			return true;
+		}
 		if (tripsOpen) {
 			tripsDialogClick(mouseX, mouseY);
 			return true;
@@ -1389,11 +1601,18 @@ public class MapScreen extends Screen {
 	@Override
 	public boolean mouseReleased(double mouseX, double mouseY, int button) {
 		dragging = false;
+		qualityDragging = false;
 		return super.mouseReleased(mouseX, mouseY, button);
 	}
 
 	@Override
 	public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+		// 拖质量滑块时不要同时平移地图
+		if (qualityDragging && exportOpen) {
+			int x = (width - EXPORT_W) / 2;
+			updateQuality(mouseX, x + 54, 122);
+			return true;
+		}
 		if (dragging) {
 			centerX -= (mouseX - dragLastX) / scale;
 			centerZ -= (mouseY - dragLastY) / scale;
@@ -1427,6 +1646,10 @@ public class MapScreen extends Screen {
 
 	@Override
 	public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+		if (exportOpen && keyCode == GLFW.GLFW_KEY_ESCAPE) {
+			exportOpen = false;
+			return true;
+		}
 		if (tripsOpen && keyCode == GLFW.GLFW_KEY_ESCAPE) {
 			tripsOpen = false;
 			return true;
@@ -1593,6 +1816,9 @@ public class MapScreen extends Screen {
 			case "my":
 				setRouteMode(true);
 				useMyLocation();
+				break;
+			case "export":
+				exportOpen = true;
 				break;
 			case "trips":
 				tripsOpen = !tripsOpen;

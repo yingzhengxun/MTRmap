@@ -30,7 +30,8 @@
 ### 游戏内
 
 - 在 MTR 铁路仪表板上注入「交通线路图」按钮，点击后用系统浏览器打开网页地图。
-- **游戏内地图窗口（F6）**：以 squaremap 渲染的瓦片为底图，叠加 MTR 线网、车站、换乘站、车厂、列车与玩家；拖拽平移、滚轮缩放；左侧搜索（车站 / 线路）与线路一览，右侧工具栏（路径查询 / 夜间模式 / 中英文 / 车厂开关 / 缩放 / 重置 / 我的位置），点车站或线路可看详情、做路径查询并把方案同步到游戏内导航。
+- **游戏内地图窗口（F6）**：以 squaremap 渲染的瓦片为底图，叠加 MTR 线网、车站、换乘站、车厂、列车与玩家；拖拽平移、滚轮缩放；左侧搜索（车站 / 线路）与线路一览，右侧工具栏（路径查询 / 夜间模式 / 中英文 / 导出图片 / 车厂开关 / 缩放 / 重置 / 我的位置 / 行程记录），点车站或线路可看详情、做路径查询并把方案同步到游戏内导航。
+- **导出图片**：整个线网导出成 PNG / JPG（质量可调，最长边 4096）；**纪念票根**在行程记录里一键保存为 PNG（不做打印）。产物保存在 `<游戏目录>/mtrmap/`。
 - 导航 HUD 面板：显示当前行程进度；`Ctrl+X`（无界面打开时）退出导航；完成或退出时上传行程记录。
 
 ## 安装
@@ -171,7 +172,8 @@ Each Minecraft version ships a single `universal` jar that loads directly on bot
 #### In game
 
 - Injects a "Route Map" button into MTR's railway dashboard that opens the web map in the system browser.
-- **In-game map window (F6)**: squaremap tiles as the base map with the MTR network, stations, interchanges, depots, trains and players overlaid. Drag to pan, scroll to zoom; station/line search and a line list on the left, a toolbar on the right (route planner / night mode / language / depots / zoom / reset / my location), and station or line details. Route queries are pushed to the in-game navigation.
+- **In-game map window (F6)**: squaremap tiles as the base map with the MTR network, stations, interchanges, depots, trains and players overlaid. Drag to pan, scroll to zoom; station/line search and a line list on the left, a toolbar on the right (route planner / night mode / language / export / depots / zoom / reset / my location / trip records), and station or line details. Route queries are pushed to the in-game navigation.
+- **Export**: the whole network as PNG / JPG (adjustable quality, max edge 4096); a **souvenir ticket** can be saved as PNG from the trip records (save only, no printing). Files land in `<gameDir>/mtrmap/`.
 - Navigation HUD panel showing current trip progress. `Ctrl+X` (with no screen open) exits navigation; the trip is uploaded on completion or exit.
 
 ### Installation
