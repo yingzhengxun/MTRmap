@@ -61,7 +61,7 @@ public final class MapDataClient {
 		active = false;
 		current = EMPTY;
 		TileTextures.clear();
-		SquaremapBridge.invalidate();
+		WorldMapBridge.invalidate();
 	}
 
 	/** 立即刷新一次（切换站点开关等场景不用等下一个周期） */
@@ -140,6 +140,29 @@ public final class MapDataClient {
 			}
 			try (InputStream is = conn.getInputStream()) {
 				return new String(MtrMapCommon.readAll(is), StandardCharsets.UTF_8);
+			}
+		} catch (Throwable t) {
+			return null;
+		} finally {
+			if (conn != null) {
+				conn.disconnect();
+			}
+		}
+	}
+
+	/** 同步 GET，返回响应体字节（世界地图瓦片用）；失败返回 null */
+	public static byte[] getBytes(String path) {
+		HttpURLConnection conn = null;
+		try {
+			conn = (HttpURLConnection) new URL(base() + path).openConnection();
+			conn.setConnectTimeout(TIMEOUT_MS);
+			conn.setReadTimeout(TIMEOUT_MS);
+			conn.setRequestMethod("GET");
+			if (conn.getResponseCode() != 200) {
+				return null;
+			}
+			try (InputStream is = conn.getInputStream()) {
+				return MtrMapCommon.readAll(is);
 			}
 		} catch (Throwable t) {
 			return null;

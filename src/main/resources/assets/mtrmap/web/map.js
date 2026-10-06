@@ -278,6 +278,10 @@
 	let players = [];
 	let stationMap = {};
 	let avatarCache = {};
+	// 自研世界地图底图：服务端渲染的瓦片参数与图片缓存
+	let worldMapSettings = null;      // {tileSize, maxZoom, minZoom, ...}，会话内固定；未拿到时为 null
+	const worldMapTiles = {};         // "z/tx_ty" -> Image（加载中或已加载）
+	const worldMapFailed = {};        // "z/tx_ty" -> 失败时间戳（404 表示该区域尚未采样）
 	let isDragging = false;
 	let lastMouseX = 0;
 	let lastMouseY = 0;
@@ -755,10 +759,27 @@
 		} catch (e) { /* silent */ }
 	}
 
+	// 获取自研世界地图的瓦片参数。服务器可能尚未就绪，失败时每 5 秒重试一次
+	function loadWorldMapSettings() {
+		fetch('/api/worldmap/settings')
+			.then(resp => {
+				if (!resp.ok) throw new Error('HTTP ' + resp.status);
+				return resp.json();
+			})
+			.then(s => {
+				if (!s || !s.tileSize || s.maxZoom === undefined) throw new Error('bad settings');
+				worldMapSettings = s;
+				render();
+			})
+			.catch(() => { setTimeout(loadWorldMapSettings, 5000); });
+	}
+
 	// ===== 绘制 =====
 	function render() {
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
 		drawBackground();
+		// 自研世界地图底图：画在网格之上、列车网络之下；出错也不能影响后续绘制
+		try { drawWorldMapBase(); } catch (e) { /* ignore */ }
 		drawDepots();
 		// 路径查询模式下线路改为「相邻车站直线」的示意图
 		if (routeMode) {
@@ -796,6 +817,62 @@
 			ctx.lineTo(canvas.width, p.y);
 		}
 		ctx.stroke();
+	}
+
+	// 绘制自研世界地图底图。瓦片坐标约定与服务端一致：
+	// 在层级 z，1 像素 = 2^(maxZoom - z) 个方块，故一块瓦片覆盖 tileSize * 2^(maxZoom-z) 个方块。
+	function drawWorldMapBase() {
+		if (!worldMapSettings) return;
+		if (!canvas.width || !canvas.height) return;
+		if (!(scale > 0)) return;
+		const tileSize = worldMapSettings.tileSize;
+		const maxZoom = worldMapSettings.maxZoom;
+		const minZoom = worldMapSettings.minZoom;
+		// 由当前缩放反推最合适的层级（scale 越大用越细的层级）
+		let zoom = Math.floor(maxZoom + Math.log2(scale));
+		if (zoom < minZoom) zoom = minZoom;
+		if (zoom > maxZoom) zoom = maxZoom;
+		const blocksPerTile = tileSize * Math.pow(2, maxZoom - zoom);
+		// 视野覆盖的世界范围 -> 瓦片索引区间（左上索引可能为负，必须用 Math.floor）
+		const topLeft = canvasToWorld(0, 0);
+		const bottomRight = canvasToWorld(canvas.width, canvas.height);
+		const minTx = Math.floor(topLeft.x / blocksPerTile);
+		const maxTx = Math.floor(bottomRight.x / blocksPerTile);
+		const minTy = Math.floor(topLeft.z / blocksPerTile);
+		const maxTy = Math.floor(bottomRight.z / blocksPerTile);
+		const now = Date.now();
+		let newImages = 0;   // 本帧新建的图片数（限制并发请求）
+		let drawn = 0;       // 本帧已绘制的瓦片数
+		for (let ty = minTy; ty <= maxTy; ty++) {
+			for (let tx = minTx; tx <= maxTx; tx++) {
+				if (newImages >= 8 || drawn >= 100) return;
+				const key = zoom + '/' + tx + '_' + ty;
+				const entry = worldMapTiles[key];
+				if (!entry) {
+					// 404 过的瓦片 10 秒内不再请求，避免每帧狂发请求
+					const failedAt = worldMapFailed[key];
+					if (failedAt && now - failedAt < 10000) continue;
+					const img = new Image();
+					img.onload = () => { render(); };
+					img.onerror = () => {
+						// 该区域尚未采样（404），10 秒后再试一次
+						worldMapFailed[key] = Date.now();
+						delete worldMapTiles[key];
+						setTimeout(() => { render(); }, 10000);
+					};
+					img.src = '/api/worldmap/' + zoom + '/' + tx + '_' + ty + '.png';
+					worldMapTiles[key] = img;
+					newImages++;
+					continue;
+				}
+				if (!entry.complete || entry.naturalWidth === 0) continue; // 尚未加载完成
+				const p = worldToCanvas(tx * blocksPerTile, ty * blocksPerTile);
+				const size = blocksPerTile * scale;
+				// +1 像素，避免相邻瓦片之间出现 1px 缝隙
+				ctx.drawImage(entry, p.x, p.y, size + 1, size + 1);
+				drawn++;
+			}
+		}
 	}
 
 	function drawRoutes() {
@@ -3005,6 +3082,8 @@
 		setupInteraction();
 		window.addEventListener('resize', resizeCanvas);
 		refreshData();
+		// 拉取自研世界地图参数（失败会自动重试），拿到后底图才会出现
+		loadWorldMapSettings();
 		// 识别当前访问者是不是游戏内玩家（是则左上角显示头像与用户名）
 		fetchWhoAmI();
 		// 之后每 2 秒刷新一次位置，让「我的位置」跟着游戏内实际坐标走

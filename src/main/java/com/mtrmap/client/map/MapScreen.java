@@ -20,7 +20,7 @@ import java.util.List;
 /**
  * 游戏内地图窗口（F6 打开）。
  *
- * <p>底图是 squaremap 渲染好的瓦片（{@code tiles/<world>/{z}/{x}_{y}.png}），
+ * <p>底图是自研世界地图的瓦片（{@code /api/worldmap/<z>/<x>_<y>.png}），
  * 上面叠 MTR 线网、车站、车厂、列车与玩家；交互与网页地图一致：
  * 拖拽平移、滚轮缩放、点车站看详情、路径查询并把路线同步到游戏内导航。
  *
@@ -32,7 +32,6 @@ public class MapScreen extends Screen {
 	// ===== 相机 =====
 	private static final double MIN_SCALE = 0.02;
 	private static final double MAX_SCALE = 4.0;
-	private static final int TILE_SIZE = 512;
 	/** 一屏需要绘制的瓦片上限，超过就只画纯色底，避免缩得太小时铺满屏幕 */
 	private static final int MAX_TILES = 480;
 
@@ -260,26 +259,26 @@ public class MapScreen extends Screen {
 		// 本窗口没有任何原版控件，绘制全部由上面的 GuiSink 完成。
 	}
 
-	// ===== 底图：squaremap 瓦片 =====
+	// ===== 底图：自研世界地图瓦片 =====
 
 	private void drawTileBackground(GuiSink sink) {
-		SquaremapBridge.Result sm = SquaremapBridge.resolve();
-		if (!sm.ok()) {
+		WorldMapBridge.Settings wm = WorldMapBridge.settings();
+		if (!wm.ok()) {
 			sink.fill(0, 0, width, height, dark ? 0xFF14141C : 0xFFF2F2F6);
-			drawBaseMapHint(sink, sm.detail);
+			drawBaseMapHint(sink, wm.detail);
 			return;
 		}
-		double tileZoomExact = sm.maxZoom + Math.log(scale) / Math.log(2);
+		double tileZoomExact = wm.maxZoom + Math.log(scale) / Math.log(2);
 		int tileZoom = (int) Math.floor(tileZoomExact);
-		tileZoom = Math.max(0, Math.min(sm.maxZoom, tileZoom));
-		double tileScale = Math.pow(2, tileZoom - sm.maxZoom);
-		double tileScreenSize = TILE_SIZE * scale / tileScale;
+		tileZoom = Math.max(wm.minZoom, Math.min(wm.maxZoom, tileZoom));
+		double tileScale = Math.pow(2, tileZoom - wm.maxZoom);
+		double tileScreenSize = wm.tileSize * scale / tileScale;
 
 		double worldLeft = screenToWorldX(0);
 		double worldRight = screenToWorldX(width);
 		double worldTop = screenToWorldZ(0);
 		double worldBottom = screenToWorldZ(height);
-		long blocksPerTile = Math.round(TILE_SIZE / tileScale);
+		long blocksPerTile = Math.round(wm.tileSize / tileScale);
 		int tx0 = (int) Math.floor(worldLeft / blocksPerTile);
 		int tx1 = (int) Math.floor(worldRight / blocksPerTile);
 		int ty0 = (int) Math.floor(worldTop / blocksPerTile);
@@ -295,7 +294,7 @@ public class MapScreen extends Screen {
 
 		for (int ty = ty0; ty <= ty1; ty++) {
 			for (int tx = tx0; tx <= tx1; tx++) {
-				ResourceLocation texture = TileTextures.get(sm.baseUrl, sm.world, tileZoom, tx, ty);
+				ResourceLocation texture = TileTextures.get(tileZoom, tx, ty);
 				if (texture == null) {
 					continue;
 				}
@@ -308,12 +307,12 @@ public class MapScreen extends Screen {
 		}
 	}
 
-	/** 底图拿不到时，把原因写在屏幕中间（解析在后台重试，出问题也不阻塞渲染） */
+	/** 底图拿不到时，把原因写在屏幕中间（参数在后台重试，出问题也不阻塞渲染） */
 	private void drawBaseMapHint(GuiSink sink, String detail) {
 		if (detail == null || detail.isEmpty()) {
 			return;
 		}
-		sink.text(font, s("squaremap 底图不可用", "squaremap base map unavailable"),
+		sink.text(font, s("世界地图底图不可用", "world map base layer unavailable"),
 				width / 2f, height / 2f - 6, 0xFFFF8080, true);
 		sink.text(font, detail, width / 2f, height / 2f + 8, 0xFFFFC080, true);
 	}

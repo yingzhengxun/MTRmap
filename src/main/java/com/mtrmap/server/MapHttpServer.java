@@ -35,6 +35,8 @@ import java.util.concurrent.Executors;
  *   GET  /api/trips     -> 某玩家的行程记录
  *   POST /api/trips     -> 新增一条行程记录
  *   POST /api/trips/delete -> 删除一条行程记录
+ *   GET  /api/worldmap/settings -> 自研世界地图（底图）的瓦片边长与缩放范围
+ *   GET  /api/worldmap/{z}/{x}_{y}.png -> 自研世界地图瓦片
  *   GET  /avatar/{uuid} -> 玩家头像 PNG
  */
 public class MapHttpServer {
@@ -212,6 +214,64 @@ public class MapHttpServer {
 				MtrMapCommon.LOGGER.error("处理 /api/trips/delete 请求时发生异常", t);
 				sendError(exchange, t);
 			}
+		});
+
+		// 自研世界地图（底图）参数：瓦片边长与缩放范围
+		server.createContext("/api/worldmap/settings", exchange -> {
+			try {
+				JsonObject out = new JsonObject();
+				out.addProperty("tileSize", WorldMapTiles.TILE_SIZE);
+				out.addProperty("maxZoom", WorldMapTiles.MAX_ZOOM);
+				out.addProperty("minZoom", WorldMapTiles.MIN_ZOOM);
+				out.addProperty("world", WorldMapTiles.worldName());
+				out.addProperty("sampledChunks", WorldMapTiles.sampledChunks());
+				sendJson(exchange, GSON.toJson(out));
+			} catch (Throwable t) {
+				MtrMapCommon.LOGGER.error("处理 /api/worldmap/settings 请求时发生异常", t);
+				sendError(exchange, t);
+			}
+		});
+
+		// 自研世界地图瓦片：/api/worldmap/<zoom>/<tx>_<ty>.png
+		server.createContext("/api/worldmap/", exchange -> {
+			try {
+				String path = exchange.getRequestURI().getPath();
+				String rest = path.substring("/api/worldmap/".length());
+				if (rest.endsWith(".png")) {
+					rest = rest.substring(0, rest.length() - 4);
+				}
+				String[] parts = rest.split("/");
+				if (parts.length != 2) {
+					exchange.sendResponseHeaders(404, -1);
+					exchange.close();
+					return;
+				}
+				String[] tile = parts[1].split("_");
+				int zoom = Integer.parseInt(parts[0]);
+				int tx = Integer.parseInt(tile[0]);
+				int ty = Integer.parseInt(tile[1]);
+				byte[] png = WorldMapTiles.tilePng(zoom, tx, ty);
+				if (png == null || png.length == 0) {
+					// 该范围还没采到数据：交给前端按纯色底处理
+					exchange.sendResponseHeaders(404, -1);
+					exchange.close();
+					return;
+				}
+				exchange.getResponseHeaders().set("Content-Type", "image/png");
+				exchange.getResponseHeaders().set("Cache-Control", "no-cache");
+				exchange.sendResponseHeaders(200, png.length);
+				try (OutputStream os = exchange.getResponseBody()) {
+					os.write(png);
+				}
+			} catch (Throwable t) {
+				MtrMapCommon.LOGGER.error("处理世界地图瓦片请求时发生异常", t);
+				try {
+					exchange.sendResponseHeaders(500, -1);
+				} catch (Throwable ignored) {
+					// 响应已经发出去了
+				}
+			}
+			exchange.close();
 		});
 
 		// 调试端点：线路寻路诊断（排查线位问题时使用）

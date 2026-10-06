@@ -24,13 +24,6 @@ ordering = "AFTER"
 side = "BOTH"
 
 [[dependencies.${id}]]
-modId = "squaremap"
-mandatory = true
-versionRange = "*"
-ordering = "AFTER"
-side = "BOTH"
-
-[[dependencies.${id}]]
 modId = "forge"
 mandatory = true
 # 同 loaderVersion：按官方 MDK 只用主版本号，避免把 Forge 钉在某个具体小版本上

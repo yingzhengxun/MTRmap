@@ -24,13 +24,6 @@ ordering = "AFTER"
 side = "BOTH"
 
 [[dependencies.${id}]]
-modId = "squaremap"
-type = "required"
-versionRange = "*"
-ordering = "AFTER"
-side = "BOTH"
-
-[[dependencies.${id}]]
 modId = "neoforge"
 type = "required"
 versionRange = "[${neoforge},)"

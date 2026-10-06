@@ -17,9 +17,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * squaremap 瓦片纹理缓存。
+ * 自研世界地图瓦片纹理缓存。
  *
- * <p>瓦片是 512×512 的 PNG，从 squaremap 的 HTTP 服务拉取；解码与网络都在后台线程完成，
+ * <p>瓦片是 512×512 的 PNG，从本模组自己的 HTTP 服务拉取；解码与网络都在后台线程完成，
  * 纹理注册（必须回渲染线程）通过 {@link Minecraft#execute} 投递。缓存按 LRU 淘汰，
  * 超出上限的纹理调用 {@code TextureManager.release} 释放显存。
  *
@@ -29,7 +29,7 @@ public final class TileTextures {
 
 	/** 同时保留的瓦片纹理上限（每张 512×512，约 1MB 显存） */
 	private static final int MAX_TEXTURES = 160;
-	/** 与 squaremap 的并发连接数上限 */
+	/** 与服务端的并发连接数上限 */
 	private static final int WORKERS = 3;
 	/** 一次渲染内最多发起多少张新瓦片请求，避免缩放瞬间打出上百个请求 */
 	private static final int MAX_REQUESTS_PER_FRAME = 6;
@@ -47,8 +47,6 @@ public final class TileTextures {
 			},
 			new ThreadPoolExecutor.DiscardPolicy());
 
-	private static String currentBaseUrl;
-	private static String currentWorld;
 	private static int requestsThisFrame;
 
 	private TileTextures() {
@@ -66,26 +64,23 @@ public final class TileTextures {
 	}
 
 	/**
-	 * 取一张瓦片的纹理；未就绪返回 null。
+	 * 取一张世界地图瓦片的纹理；未就绪返回 null。
 	 *
-	 * @param baseUrl squaremap 的 Web 根地址
-	 * @param world   世界目录名
+	 * @param zoom  缩放级别（越大越细，1 像素 = 2^(maxZoom-zoom) 方块）
+	 * @param tileX 瓦片 x 索引（世界 x 整除瓦片覆盖的方块数）
+	 * @param tileY 瓦片 y 索引（世界 z 同理）
 	 */
-	public static ResourceLocation get(String baseUrl, String world, int zoom, int tileX, int tileY) {
-		// squaremap 换地址/换世界时整体作废
-		if (!baseUrl.equals(currentBaseUrl) || !world.equals(currentWorld)) {
-			reset(baseUrl, world);
-		}
+	public static ResourceLocation get(int zoom, int tileX, int tileY) {
 		String key = zoom + "/" + tileX + "_" + tileY;
 		Entry entry = ENTRIES.get(key);
 		if (entry == null) {
 			entry = new Entry();
 			ENTRIES.put(key, entry);
-			request(baseUrl, world, key, zoom, tileX, tileY, entry);
+			request(key, zoom, tileX, tileY, entry);
 		} else if (entry.failed && System.currentTimeMillis() - entry.failedAt > 10_000L) {
-			// 暂时失败（服务器还没起来等）允许重试
+			// 暂时失败（服务端还没采到这块数据）允许重试
 			entry.failed = false;
-			request(baseUrl, world, key, zoom, tileX, tileY, entry);
+			request(key, zoom, tileX, tileY, entry);
 		}
 		ResourceLocation location = entry.location;
 		if (location != null) {
@@ -94,16 +89,16 @@ public final class TileTextures {
 		return location;
 	}
 
-	private static void request(String baseUrl, String world, String key, int zoom, int tileX, int tileY, Entry entry) {
+	private static void request(String key, int zoom, int tileX, int tileY, Entry entry) {
 		if (requestsThisFrame >= MAX_REQUESTS_PER_FRAME || IN_FLIGHT.get() >= WORKERS * 4) {
 			return;
 		}
 		requestsThisFrame++;
 		IN_FLIGHT.incrementAndGet();
-		String url = SquaremapBridge.tileUrl(newUrl(baseUrl, world), zoom, tileX, tileY);
+		String path = WorldMapBridge.tilePath(zoom, tileX, tileY);
 		POOL.execute(() -> {
 			try {
-				byte[] bytes = SquaremapBridge.getBytes(url);
+				byte[] bytes = MapDataClient.getBytes(path);
 				if (bytes == null || bytes.length == 0) {
 					entry.failed = true;
 					entry.failedAt = System.currentTimeMillis();
@@ -130,16 +125,16 @@ public final class TileTextures {
 			}
 			// 1.21 起 ResourceLocation 的公开构造函数被隐藏，改用 fromNamespaceAndPath
 			//? if >=1.21.1 {
-			/*ResourceLocation location = ResourceLocation.fromNamespaceAndPath("mtrmap", "squaremap/" + key);
+			/*ResourceLocation location = ResourceLocation.fromNamespaceAndPath("mtrmap", "worldmap/" + key);
 			*///?} else {
-			ResourceLocation location = new ResourceLocation("mtrmap", "squaremap/" + key);
+			ResourceLocation location = new ResourceLocation("mtrmap", "worldmap/" + key);
 			//?}
 			Minecraft.getInstance().getTextureManager().register(location, new DynamicTexture(image));
 			entry.location = location;
 			markUsed(key);
 			evictIfNeeded();
 		} catch (Throwable t) {
-			MtrMapCommon.LOGGER.debug("注册瓦片纹理失败: {}", key, t);
+			MtrMapCommon.LOGGER.debug("注册世界地图瓦片纹理失败: {}", key, t);
 			image.close();
 		}
 	}
@@ -167,24 +162,8 @@ public final class TileTextures {
 		}
 	}
 
-	private static void reset(String baseUrl, String world) {
-		currentBaseUrl = baseUrl;
-		currentWorld = world;
-		synchronized (ACCESS_ORDER) {
-			for (Entry entry : ENTRIES.values()) {
-				if (entry.location != null) {
-					Minecraft.getInstance().getTextureManager().release(entry.location);
-				}
-			}
-			ENTRIES.clear();
-			ACCESS_ORDER.clear();
-		}
-	}
-
 	/** 断开连接 / 换存档时清空 */
 	public static void clear() {
-		currentBaseUrl = null;
-		currentWorld = null;
 		synchronized (ACCESS_ORDER) {
 			for (Entry entry : ENTRIES.values()) {
 				if (entry.location != null) {
@@ -194,12 +173,5 @@ public final class TileTextures {
 			ENTRIES.clear();
 			ACCESS_ORDER.clear();
 		}
-	}
-
-	private static SquaremapBridge.Result newUrl(String baseUrl, String world) {
-		SquaremapBridge.Result result = new SquaremapBridge.Result();
-		result.baseUrl = baseUrl;
-		result.world = world;
-		return result;
 	}
 }

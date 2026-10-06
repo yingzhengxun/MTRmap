@@ -32,7 +32,7 @@ import java.util.Locale;
  *
  * <p>游戏内的界面是用 Minecraft 的 GUI 管线画的，没法直接抓成图片，所以这里用
  * Java2D 重新画一遍：公式、配色、图层顺序全部照搬网页 map.js 的 render()，
- * 底图瓦片则把 squaremap 的 PNG 直接贴上去。产物存到
+ * 底图瓦片则把自研世界地图接口返回的 PNG 直接贴上去。产物存到
  * {@code <游戏目录>/mtrmap/} 下，文件名与网页的下载名一致。
  *
  * <p>只支持 PNG 与 JPG：WebP 需要额外的编解码库，游戏里不引入。
@@ -206,16 +206,16 @@ public final class MapExporter {
 	}
 
 	private static void drawTiles(Graphics2D g, int expW, int expH, double scale, double offX, double offY) {
-		// 导出在后台线程跑，等得起：确保拿到确定的 squaremap 底图信息
-		SquaremapBridge.Result sm = SquaremapBridge.await(3000L);
-		if (!sm.ok() || scale <= 0) {
+		// 导出在后台线程跑，等得起：确保拿到确定的世界地图参数
+		WorldMapBridge.Settings wm = WorldMapBridge.await(3000L);
+		if (!wm.ok() || scale <= 0) {
 			return;
 		}
-		int tileZoom = (int) Math.floor(sm.maxZoom + Math.log(scale) / Math.log(2));
-		tileZoom = Math.max(0, Math.min(sm.maxZoom, tileZoom));
-		double tileScale = Math.pow(2, tileZoom - sm.maxZoom);
-		double tileScreen = 512 * scale / tileScale;
-		long blocksPerTile = Math.round(512 / tileScale);
+		int tileZoom = (int) Math.floor(wm.maxZoom + Math.log(scale) / Math.log(2));
+		tileZoom = Math.max(wm.minZoom, Math.min(wm.maxZoom, tileZoom));
+		double tileScale = Math.pow(2, tileZoom - wm.maxZoom);
+		double tileScreen = wm.tileSize * scale / tileScale;
+		long blocksPerTile = Math.round(wm.tileSize / tileScale);
 		int tx0 = (int) Math.floor((0 - offX) / scale / blocksPerTile);
 		int tx1 = (int) Math.floor((expW - offX) / scale / blocksPerTile);
 		int ty0 = (int) Math.floor((0 - offY) / scale / blocksPerTile);
@@ -226,7 +226,7 @@ public final class MapExporter {
 		}
 		for (int ty = ty0; ty <= ty1; ty++) {
 			for (int tx = tx0; tx <= tx1; tx++) {
-				byte[] bytes = SquaremapBridge.getBytes(SquaremapBridge.tileUrl(sm, tileZoom, tx, ty));
+				byte[] bytes = MapDataClient.getBytes(WorldMapBridge.tilePath(tileZoom, tx, ty));
 				if (bytes == null || bytes.length == 0) {
 					continue;
 				}

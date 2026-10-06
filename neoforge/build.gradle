@@ -47,9 +47,6 @@ dependencies {
     // MTR 4.x 的 NeoForge 产物
     modImplementation rootProject.files("libs/${commonProject.property("deps.mtr_neoforge_jar")}")
 
-    // squaremap 是硬前置（游戏内地图窗口用它渲染的瓦片做底图），编译期依赖它的 Config 读端口。
-    compileOnly rootProject.files("libs/${commonProject.property("deps.squaremap_neoforge_jar")}")
-
     common(project(path: commonProject.path, configuration: "namedElements")) { transitive false }
     shadowCommon(project(path: commonProject.path, configuration: "transformProductionNeoForge")) { transitive false }
 }

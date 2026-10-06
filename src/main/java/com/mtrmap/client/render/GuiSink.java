@@ -89,7 +89,7 @@ public final class GuiSink {
 	}
 
 	/**
-	 * 画一张整图（如 squaremap 瓦片）。缩放交给调用方用 push/translate/scale 处理，
+	 * 画一张整图（如世界地图瓦片）。缩放交给调用方用 push/translate/scale 处理，
 	 * 这里只负责把整张纹理铺满目标矩形。
 	 */
 	public void texture(ResourceLocation texture, float x, float y, float w, float h) {

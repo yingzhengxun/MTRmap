@@ -17,7 +17,7 @@ neoforge/versions/
 # 根目录下由 shadowJar 实验遗留的 MANIFEST（fabric/forge/neoforge 里的 META-INF 需要保留）
 /META-INF/
 
-# 本地第三方依赖 jar（MTR / squaremap，受各自许可证约束，不随源码发布）
+# 本地第三方依赖 jar（MTR，受其许可证约束，不随源码发布）
 libs/
 
 # IDE
