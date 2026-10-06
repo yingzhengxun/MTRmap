@@ -4,7 +4,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.mtrmap.MtrMapCommon;
-import com.mtrmap.config.MtrMapConfig;
 
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -100,8 +99,9 @@ public final class MapDataClient {
 
 	// ===== HTTP =====
 
+	/** 地图服务地址：连哪台服务器就访问哪台（专用服务端上不能写死 127.0.0.1） */
 	private static String base() {
-		return "http://127.0.0.1:" + MtrMapConfig.getActivePort();
+		return com.mtrmap.client.MapEndpoint.base();
 	}
 
 	private static JsonObject getJson(String path) {

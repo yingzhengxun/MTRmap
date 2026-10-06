@@ -26,4 +26,12 @@ public interface MtrMapPlatform {
      * 服务端侧只是发起通道注册，由平台实现负责具体的网络协议。
      */
     void sendAvatarToServer(UUID uuid, byte[] png);
+
+    /**
+     * 服务端把地图 HTTP 端口告诉某个玩家（服务端 -> 客户端）。
+     *
+     * <p>专用服务端上玩家在别的机器上玩，客户端读不到服务器那份 mtrmap.json，
+     * 只能由服务端把实际监听的端口发过来，客户端才能拼出可访问的地图服务地址。
+     */
+    void sendMapPort(net.minecraft.server.level.ServerPlayer player, int port);
 }

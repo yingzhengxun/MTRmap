@@ -11,7 +11,7 @@ Minecraft Transit Railway（MTR）线路图模组：服务端采集 MTR 的线�
 | 位置 | 职责 |
 | --- | --- |
 | 服务端 | `MapHttpServer` 提供网页与 JSON 接口（默认 1145）；`MapDataCollector` / `TrainCollector` / `PlayerTracker` 采集 MTR 数据；`RailPathFinder` 算轨道几何；`NavTaskStore` / `TripStore` 管理导航任务与行程记录 |
-| 客户端 | `MapScreen` 游戏内地图窗口（F6）；`NavHud` 导航 HUD、`MapDataClient` 每 2 秒轮询本机服务 |
+| 客户端 | `MapScreen` 游戏内地图窗口（F6）；`NavHud` 导航 HUD、`MapDataClient` 每 2 秒轮询地图服务；`MapEndpoint` 把「当前服务器地址 + 服务端同步过来的端口」拼成服务地址（专用服务端上不能写死 127.0.0.1） |
 | 网页 | `src/main/resources/assets/mtrmap/web/`（index.html / map.js / style.css），路径查询是纯前端 Dijkstra |
 | Mixin | 只注入原版 / MTR 的界面：`DashboardScreenMixin` 加「交通线路图」按钮，`GuiHudMixin` 挂 HUD 绘制。**不修改 MTR 本体** |
 
@@ -117,6 +117,7 @@ ResourceLocation id = new ResourceLocation("mtrmap", "tex");
 - **`pack.mcmeta` 必须位于 jar 根**，否则 Forge 会丢弃整个资源包，语言文件不生效（仪表板按钮会显示成 `key.mtrmap.map_button` 而不是「交通线路图」）。
 - **MTR 依赖范围用通配符 `*`**：MTR 3.x 的版本号自带 MC 前缀（`1.20.1-3.6.3`），写死区间会被判定为不兼容而拒绝加载；4.x 又是 `4.1.0-beta.2` 这种格式。实测 3.x / 4.x 都可用。
 - **Forge 元数据的 `loaderVersion` 是 javafml 主版本**（1.20.1 填 `[47,)`），不是完整的 Forge 版本；NeoForge 的 `loaderVersion` 则是 FML loader 范围 `[1,)`。
+- **专用服务端上客户端不能写死 `127.0.0.1`**：地图服务跑在服务端那台机器上，客户端既访问不到 `127.0.0.1`，也读不到服务器那份 `mtrmap.json`。所以服务端每 tick 把实际监听的端口通过自定义包（通道 `mtrmap:port`，Fabric / Forge / NeoForge 各一套实现）同步给每个在线玩家，客户端由 `client/MapEndpoint` 拼出「当前服务器地址 + 该端口」；单人游戏没有服务器地址，退回 `127.0.0.1` + 本地配置端口。`NavController`（导航/行程）与仪表板按钮同样走这个地址。
 - **不要重新引入底图 / Xaero 依赖**：曾经把 Xaero 世界地图当底图（读它的显存贴图合成瓦片、上传服务端给网页用），现已完全撤掉——地图就是**纯色底上直接叠线网**。`XaeroMapTiles` / `TileTextures` / `WorldMapBridge` / `WorldMapStore`、`/api/worldmap*` 端点、`xaeroworldmap` 硬前置依赖全部删除了，不要再加回来。
 
 ## HTTP 接口
@@ -150,7 +151,7 @@ ResourceLocation id = new ResourceLocation("mtrmap", "tex");
 | 字段 | 说明 |
 | --- | --- |
 | `showDepots` | 是否显示车厂 |
-| `port` | HTTP 服务端口，默认 `1145`。被占用时自动往后顺延到第一个可用端口，并在玩家进游戏时于消息栏提示实际端口 |
+| `port` | HTTP 服务端口，默认 `1145`。被占用时自动往后顺延到第一个可用端口，并在玩家进游戏时于消息栏提示实际端口。专用服务端上以**服务端那份配置**为准：服务端每 tick 把实际端口同步给在线玩家，客户端不用填一致 |
 
 行程记录落盘在 `mods/mapconfig/mtrmap_trips.json`（按玩家 UUID 归档）。
 
@@ -179,7 +180,7 @@ A Minecraft Transit Railway (MTR) route map mod: the server side collects MTR ne
 | Where | Responsibility |
 | --- | --- |
 | Server | `MapHttpServer` serves the web map and JSON endpoints (default 1145); `MapDataCollector` / `TrainCollector` / `PlayerTracker` collect MTR data; `RailPathFinder` computes rail geometry; `NavTaskStore` / `TripStore` hold nav tasks and trip records |
-| Client | `MapScreen` is the in-game map window (F6); `NavHud` the navigation HUD, and `MapDataClient` polls the local server every 2 seconds |
+| Client | `MapScreen` is the in-game map window (F6); `NavHud` the navigation HUD, `MapDataClient` polls the map service every 2 seconds, and `MapEndpoint` builds the service URL from the current server address plus the port the server synced (never hard-code 127.0.0.1 — it breaks on dedicated servers) |
 | Web | `src/main/resources/assets/mtrmap/web/` (index.html / map.js / style.css). The route planner is a pure client-side Dijkstra |
 | Mixin | Only injects vanilla / MTR screens: `DashboardScreenMixin` adds the "Traffic Map" button, `GuiHudMixin` hooks HUD rendering. **The MTR mod itself is never modified** |
 
@@ -285,6 +286,7 @@ A "shell + embedded jars" layout, one jar per MC version:
 - **`pack.mcmeta` must be at the jar root**, otherwise Forge drops the whole resource pack and the lang files never load (the dashboard button then shows `key.mtrmap.map_button` instead of "Traffic Map").
 - **Declare the MTR dependency range as the wildcard `*`**: MTR 3.x reports versions with an MC prefix (`1.20.1-3.6.3`), so a hard-coded range is judged out of range and refuses to load, while 4.x uses formats like `4.1.0-beta.2`. Both 3.x and 4.x are verified to work.
 - **Forge metadata's `loaderVersion` is the javafml major version** (`[47,)` for 1.20.1), not a full Forge version; NeoForge's `loaderVersion` is the FML loader range `[1,)`.
+- **Never hard-code `127.0.0.1` on the client (dedicated servers)**: the map service runs on the server machine, so a client can neither reach `127.0.0.1` nor read the server's `mtrmap.json`. The server therefore syncs its actual port to every online player via a custom packet (channel `mtrmap:port`, with a Fabric / Forge / NeoForge implementation each) and the client's `client/MapEndpoint` builds `<current server address>:<port>`; single-player has no server address and falls back to `127.0.0.1` plus the local config port. `NavController` (navigation / trips) and the dashboard button use that same address.
 - **Do not reintroduce a base layer / Xaero dependency**: Xaero's World Map was once used as the base layer (reading its GPU textures, assembling tiles and uploading them to the server for the web map); it has been removed completely — the map is now **the network drawn straight onto a plain solid background**. `XaeroMapTiles` / `TileTextures` / `WorldMapBridge` / `WorldMapStore`, the `/api/worldmap*` endpoints and the `xaeroworldmap` hard dependency are all gone; do not add them back.
 
 ### HTTP endpoints
@@ -318,7 +320,7 @@ The config file lives at `mods/mapconfig/mtrmap.json` and is created automatical
 | Field | Description |
 | --- | --- |
 | `showDepots` | Whether to display depots |
-| `port` | HTTP server port, defaults to `1145`. If it is taken, the server shifts to the next free port and notifies players in chat with the actual port |
+| `port` | HTTP server port, defaults to `1145`. If it is taken, the server shifts to the next free port and notifies players in chat with the actual port. On a dedicated server the **server's copy wins**: the server syncs the actual port to every online player, so clients do not have to match it |
 
 Trip records are persisted to `mods/mapconfig/mtrmap_trips.json` (archived per player UUID).
 

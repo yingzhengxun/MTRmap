@@ -63,7 +63,7 @@
 | 字段 | 说明 |
 | --- | --- |
 | `showDepots` | 是否显示车厂 |
-| `port` | 网页地图端口，默认 `1145`。被占用时会自动往后顺延到第一个可用端口，并在你进游戏时用消息提示实际端口 |
+| `port` | 网页地图端口，默认 `1145`。被占用时会自动往后顺延到第一个可用端口，并在你进游戏时用消息提示实际端口。**专用服务端上以服务器那份配置为准**，客户端会自动收到同步过来的端口，不用自己填 |
 
 行程记录保存在 `mods/mapconfig/mtrmap_trips.json`。
 
@@ -81,8 +81,9 @@ A：看游戏启动时聊天栏的提示——端口被占用时模组会自动�
 **Q：地图上没有地形 / 底图？**
 A：本模组的地图**没有底图**，只在纯色背景上绘制线网、车站、车厂、列车与玩家——这样任何区域都能完整显示，也不依赖任何额外的地图模组或数据。
 
-**Q：连远程服务器能用吗？**
-A：本模组的数据采集与地图服务都跑在**服务端**，游戏内 F6 窗口也是从 `localhost:1145` 取数据的。所以在远程服务器上要用，需要把服务器的 **1145** 端口转发 / 开放到你本机，否则网页地图打不开、F6 窗口也没有数据。
+**Q：连专用服务器 / 远程服务器能用吗？**
+A：可以。数据采集与地图服务都跑在**服务端**，端口取自服务器那份 `mods/mapconfig/mtrmap.json`；服务端会把这个端口自动同步给每个进服的客户端，游戏内 F6 窗口与导航据此访问「服务器地址:端口」，所以不用在两边的配置里填同一个端口。
+需要注意的只有网络：服务器那台机器的地图端口要能被你访问到（面板 / 防火墙放行该端口）。网页地图同理，用「服务器地址:端口」打开即可。若服务端提示端口被占用而顺延，聊天栏会告知顺延后的端口。
 
 **Q：装完进游戏报错 / 模组列表里没有？**
 A：检查三件事：MC 版本与加载器是否和下载的 jar 对得上；MTR 是否已安装；Fabric 下 Fabric API 是否已安装。
@@ -165,7 +166,7 @@ The config file lives at `mods/mapconfig/mtrmap.json` and is created automatical
 | Field | Description |
 | --- | --- |
 | `showDepots` | Whether to display depots |
-| `port` | Web map port, defaults to `1145`. If it is taken, the mod shifts to the next free port and notifies you in chat with the actual port |
+| `port` | Web map port, defaults to `1145`. If it is taken, the mod shifts to the next free port and notifies you in chat with the actual port. On a **dedicated server the server's copy wins** — clients receive the port automatically and do not need to set it |
 
 Trip records are stored in `mods/mapconfig/mtrmap_trips.json`.
 
@@ -183,8 +184,9 @@ A: Check the chat notice on world load — if the port was taken, the mod shifts
 **Q: The map has no terrain / base layer.**
 A: This mod's map has **no base layer** — it only draws the network, stations, depots, trains and players on a plain solid background, so every area displays fully and no extra map mod or data is needed.
 
-**Q: Does it work on a remote server?**
-A: Data collection and the map service run **server-side**, and the F6 window also reads its data from `localhost:1145`. To use it on a remote server, forward / expose the server's **1145** port to your machine — otherwise the web map won't open and the F6 window will have no data.
+**Q: Does it work on a dedicated / remote server?**
+A: Yes. Data collection and the map service run **server-side**, using the port from the server's own `mods/mapconfig/mtrmap.json`; the server syncs that port to every client that joins, so the in-game F6 window and navigation talk to `<server address>:<port>` — you no longer have to put the same port in both configs.
+The only thing to sort out is networking: the map port on the server machine must be reachable from your machine (open it in your panel / firewall). The web map works the same way — open `<server address>:<port>`. If the server reports the port was taken and shifted, the chat notice tells you the new one.
 
 **Q: The mod doesn't show up / the game errors on startup.**
 A: Check three things: your MC version and loader match the jar you downloaded, MTR is installed, and on Fabric that Fabric API is installed.

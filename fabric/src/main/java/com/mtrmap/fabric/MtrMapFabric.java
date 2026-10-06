@@ -35,6 +35,8 @@ public class MtrMapFabric implements ModInitializer {
         PayloadTypeRegistry.playC2S().register(AvatarPayload.TYPE, AvatarPayload.CODEC);
         ServerPlayNetworking.registerGlobalReceiver(AvatarPayload.TYPE, (payload, context) ->
                 MtrMapCommon.onAvatarReceived(context.server(), payload.uuid(), payload.png()));
+        // 地图端口是服务端 -> 客户端，类型两侧都要注册（客户端那边只负责解码）
+        PayloadTypeRegistry.playS2C().register(MapPortPayload.TYPE, MapPortPayload.CODEC);
         *///?} else {
         ServerPlayNetworking.registerGlobalReceiver(MtrMapCommon.AVATAR_CHANNEL,
                 (server, player, handler, buf, responseSender) -> {

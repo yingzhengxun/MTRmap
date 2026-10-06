@@ -4,8 +4,10 @@ import com.mtrmap.MtrMapCommon;
 import com.mtrmap.platform.MtrMapPlatform;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.server.level.ServerPlayer;
 
 import java.nio.file.Path;
 import java.util.UUID;
@@ -40,6 +42,17 @@ public class FabricPlatformImpl implements MtrMapPlatform {
         buf.writeUUID(uuid);
         buf.writeByteArray(png);
         ClientPlayNetworking.send(MtrMapCommon.AVATAR_CHANNEL, buf);
+        //?}
+    }
+
+    @Override
+    public void sendMapPort(ServerPlayer player, int port) {
+        //? if >=1.21.1 {
+        /*ServerPlayNetworking.send(player, new MapPortPayload(port));
+        *///?} else {
+        FriendlyByteBuf buf = PacketByteBufs.create();
+        buf.writeInt(port);
+        ServerPlayNetworking.send(player, MtrMapCommon.PORT_CHANNEL, buf);
         //?}
     }
 }

@@ -1,6 +1,7 @@
 package com.mtrmap.neoforge;
 
 import com.mtrmap.MtrMapCommon;
+import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
@@ -9,8 +10,9 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import java.util.UUID;
 
 /**
- * NeoForge 网络通道：承载客户端推送头像的载荷。
- * 收到后转交给与加载器无关的 {@link MtrMapCommon#onAvatarReceived}。
+ * NeoForge 网络通道：承载客户端推送头像的载荷，以及服务端下发地图 HTTP 端口的载荷。
+ * 收到后转交给与加载器无关的 {@link MtrMapCommon#onAvatarReceived} /
+ * {@link MtrMapCommon#onMapPortReceived(int)}。
  *
  * <p>与 Forge 版（SimpleChannel）的差异：这里用 NeoForge 1.21.1 的自定义载荷 API，
  * 注册事件 {@link RegisterPayloadHandlersEvent} 是 mod 总线事件，故由 mod 构造器传入的
@@ -36,10 +38,21 @@ public final class NeoForgeNetwork {
                 AvatarPayload.STREAM_CODEC,
                 (payload, context) -> MtrMapCommon.onAvatarReceived(
                         MtrMapCommon.getCurrentServer(), payload.uuid(), payload.png()));
+
+        // 地图端口是服务端 -> 客户端：客户端据此才知道地图服务监听在哪个端口
+        registrar.playToClient(
+                MapPortPayload.TYPE,
+                MapPortPayload.STREAM_CODEC,
+                (payload, context) -> MtrMapCommon.onMapPortReceived(payload.port()));
     }
 
     /** 客户端把头像推给服务端。 */
     public static void sendAvatarToServer(UUID uuid, byte[] png) {
         PacketDistributor.sendToServer(new AvatarPayload(uuid, png));
+    }
+
+    /** 服务端把地图 HTTP 端口告诉某个玩家。 */
+    public static void sendMapPort(ServerPlayer player, int port) {
+        PacketDistributor.sendToPlayer(player, new MapPortPayload(port));
     }
 }

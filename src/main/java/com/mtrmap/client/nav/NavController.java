@@ -4,7 +4,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mtrmap.MtrMapCommon;
-import com.mtrmap.config.MtrMapConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import org.lwjgl.glfw.GLFW;
@@ -128,9 +127,8 @@ public final class NavController {
     }
 
     private static JsonObject fetchTask(String uuid) throws Exception {
-        int port = MtrMapConfig.getActivePort();
         HttpURLConnection conn = (HttpURLConnection) new URL(
-                "http://127.0.0.1:" + port + "/api/nav?uuid=" + uuid).openConnection();
+                com.mtrmap.client.MapEndpoint.base() + "/api/nav?uuid=" + uuid).openConnection();
         try {
             conn.setConnectTimeout(TIMEOUT_MS);
             conn.setReadTimeout(TIMEOUT_MS);
@@ -261,9 +259,8 @@ public final class NavController {
 
     private static void postJson(String uuid, String json) {
         try {
-            int port = MtrMapConfig.getActivePort();
             HttpURLConnection conn = (HttpURLConnection) new URL(
-                    "http://127.0.0.1:" + port + "/api/trips").openConnection();
+                    com.mtrmap.client.MapEndpoint.base() + "/api/trips").openConnection();
             try {
                 conn.setConnectTimeout(TIMEOUT_MS);
                 conn.setReadTimeout(TIMEOUT_MS);

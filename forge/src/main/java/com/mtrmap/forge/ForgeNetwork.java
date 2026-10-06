@@ -8,22 +8,28 @@ import com.mtrmap.MtrMapCommon;
 //? if >=1.18.2 {
 import net.minecraftforge.network.NetworkDirection;
 import net.minecraftforge.network.NetworkRegistry;
+import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 //?} else if >=1.17 {
 /*import net.minecraftforge.fmllegacy.network.NetworkDirection;
 import net.minecraftforge.fmllegacy.network.NetworkRegistry;
+import net.minecraftforge.fmllegacy.network.PacketDistributor;
 import net.minecraftforge.fmllegacy.network.simple.SimpleChannel;
 *///?} else {
 /*import net.minecraftforge.fml.network.NetworkDirection;
 import net.minecraftforge.fml.network.NetworkRegistry;
+import net.minecraftforge.fml.network.PacketDistributor;
 import net.minecraftforge.fml.network.simple.SimpleChannel;
 *///?}
+import net.minecraft.server.level.ServerPlayer;
 
 import java.util.UUID;
 
 /**
- * Forge 网络通道（SimpleChannel）：承载客户端推送头像的消息。
- * 收到后转交给与加载器无关的 {@link MtrMapCommon#onAvatarReceived}。
+ * Forge 网络通道（SimpleChannel）：承载客户端推送头像的消息，以及
+ * 服务端下发地图 HTTP 端口的消息。
+ * 收到后转交给与加载器无关的 {@link MtrMapCommon#onAvatarReceived} /
+ * {@link MtrMapCommon#onMapPortReceived(int)}。
  */
 public final class ForgeNetwork {
 
@@ -66,10 +72,32 @@ public final class ForgeNetwork {
                 })
                 *///?}
                 .add();
+
+        // 服务端下发地图 HTTP 端口（PLAY_TO_CLIENT：只有客户端会收到）
+        CHANNEL.messageBuilder(MapPortMessage.class, 1, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(MapPortMessage::encode)
+                .decoder(MapPortMessage::decode)
+                //? if >=1.19 {
+                .consumerMainThread((msg, ctx) -> {
+                    MtrMapCommon.onMapPortReceived(msg.port());
+                    ctx.get().setPacketHandled(true);
+                })
+                //?} else {
+                /*.consumer((msg, ctx) -> {
+                    MtrMapCommon.onMapPortReceived(msg.port());
+                    ctx.get().setPacketHandled(true);
+                })
+                *///?}
+                .add();
     }
 
     /** 客户端把头像推给服务端。 */
     public static void sendAvatarToServer(UUID uuid, byte[] png) {
         CHANNEL.sendToServer(new AvatarMessage(uuid, png));
+    }
+
+    /** 服务端把地图 HTTP 端口告诉某个玩家。 */
+    public static void sendMapPort(ServerPlayer player, int port) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new MapPortMessage(port));
     }
 }

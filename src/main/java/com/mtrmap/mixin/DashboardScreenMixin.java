@@ -1,7 +1,6 @@
 package com.mtrmap.mixin;
 
 import com.mtrmap.MtrMapCommon;
-import com.mtrmap.config.MtrMapConfig;
 import net.minecraft.Util;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
@@ -53,10 +52,10 @@ public class DashboardScreenMixin {
 		if (!isDashboardScreen(this)) {
 			return;
 		}
-		int port = MtrMapConfig.getActivePort();
 		Button.OnPress onPress = button -> {
 			try {
-				Util.getPlatform().openUri(new URI("http://localhost:" + port));
+				// 地址按「当前连接的服务器 + 服务端同步过来的端口」拼，专用服务端上不能写死 localhost
+				Util.getPlatform().openUri(new URI(com.mtrmap.client.MapEndpoint.pageUrl()));
 			} catch (Exception e) {
 				MtrMapCommon.LOGGER.error("打开浏览器失败", e);
 			}

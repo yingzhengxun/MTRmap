@@ -106,6 +106,8 @@ public final class MtrMapClientCommon {
         PENDING.clear();
         com.mtrmap.client.nav.NavController.onDisconnect();
         com.mtrmap.client.map.MapDataClient.onDisconnect();
+        // 忘掉上一个服务器同步过来的地图端口，下次进服重新同步
+        MtrMapCommon.clearMapPort();
         f6WasDown = false;
     }
 

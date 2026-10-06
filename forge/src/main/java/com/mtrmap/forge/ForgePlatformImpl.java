@@ -53,4 +53,9 @@ public class ForgePlatformImpl implements MtrMapPlatform {
     public void sendAvatarToServer(UUID uuid, byte[] png) {
         ForgeNetwork.sendAvatarToServer(uuid, png);
     }
+
+    @Override
+    public void sendMapPort(net.minecraft.server.level.ServerPlayer player, int port) {
+        ForgeNetwork.sendMapPort(player, port);
+    }
 }

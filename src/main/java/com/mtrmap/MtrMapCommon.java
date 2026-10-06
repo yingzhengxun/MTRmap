@@ -55,6 +55,14 @@ public final class MtrMapCommon {
     public static final ResourceLocation AVATAR_CHANNEL = new ResourceLocation("mtrmap", "avatar");
     //?}
 
+    /** 服务端把地图 HTTP 端口同步给客户端所使用的网络通道 */
+    //? if >=1.21.1 {
+    /*public static final ResourceLocation PORT_CHANNEL =
+            ResourceLocation.fromNamespaceAndPath("mtrmap", "port");
+    *///?} else {
+    public static final ResourceLocation PORT_CHANNEL = new ResourceLocation("mtrmap", "port");
+    //?}
+
     private static MinecraftServer currentServer;
     /** 端口顺延：配置端口与最终实际端口（相等或不曾启动时为 -1 表示无需提示） */
     private static int portShiftFrom = -1;
@@ -63,6 +71,33 @@ public final class MtrMapCommon {
     private static int portFailedPort = -1;
     /** 已经收到过端口提示的玩家，避免每 tick 重复刷屏 */
     private static final java.util.Set<UUID> portNoticeSent = new java.util.HashSet<>();
+    /** 已经同步过地图端口的玩家，避免每 tick 重复发包 */
+    private static final java.util.Set<UUID> portSynced = new java.util.HashSet<>();
+
+    /**
+     * 服务端同步过来的地图 HTTP 端口（只有客户端会用到；0 表示还没收到）。
+     *
+     * <p>专用服务端上地图服务跑在服务器那台机器上，客户端只知道服务器的地址、不知道地图服务监听
+     * 的是哪个端口（服务器上的 mtrmap.json 客户端读不到），所以由服务端主动告知。
+     * 单人游戏时服务端与客户端在同一个进程里，这个值与本地配置相同，行为不变。
+     */
+    private static volatile int serverMapPort = 0;
+
+    /** 地图 HTTP 端口：服务端同步过就用它，否则退回本地配置（单人游戏时两者一致）。 */
+    public static int getMapPort() {
+        int synced = serverMapPort;
+        return synced > 0 ? synced : MtrMapConfig.getActivePort();
+    }
+
+    /** 客户端收到服务端同步过来的地图端口。 */
+    public static void onMapPortReceived(int port) {
+        serverMapPort = port > 0 ? port : 0;
+    }
+
+    /** 断开连接：忘掉上一个服务器的端口，下次进服重新同步。 */
+    public static void clearMapPort() {
+        serverMapPort = 0;
+    }
 
     private MtrMapCommon() {
     }
@@ -86,6 +121,7 @@ public final class MtrMapCommon {
         portShiftTo = -1;
         portFailedPort = -1;
         portNoticeSent.clear();
+        portSynced.clear();
         try {
             int configuredPort = MtrMapConfig.getPort();
             // 端口被占用时 start 会自动往后顺延，返回真正绑定成功的端口
@@ -95,9 +131,9 @@ public final class MtrMapCommon {
                 // 顺延了：记下来，等玩家进游戏后在消息栏里提示一次
                 portShiftFrom = configuredPort;
                 portShiftTo = port;
-                LOGGER.warn("MTR Map HTTP 端口 {} 已被占用，已自动顺延到 http://localhost:{}", configuredPort, port);
+                LOGGER.warn("MTR Map HTTP 端口 {} 已被占用，已自动顺延到 {}", configuredPort, port);
             } else {
-                LOGGER.info("MTR Map HTTP 服务器已启动于 http://localhost:{}", port);
+                LOGGER.info("MTR Map HTTP 服务器已启动，监听端口 {}", port);
             }
         } catch (Exception e) {
             // 顺延范围内的端口全部被占用：服务起不来，同样等玩家进游戏后提示一次
@@ -120,6 +156,7 @@ public final class MtrMapCommon {
         portShiftTo = -1;
         portFailedPort = -1;
         portNoticeSent.clear();
+        portSynced.clear();
         currentServer = null;
         NavTaskStore.clear();
         TripStore.clear();
@@ -129,7 +166,37 @@ public final class MtrMapCommon {
     /** 每个 tick 末更新玩家位置。 */
     public static void onServerTick(MinecraftServer server) {
         PlayerTracker.update(server);
+        syncMapPort(server);
         notifyPortStatus(server);
+    }
+
+    /**
+     * 把地图 HTTP 端口同步给每个在线玩家（每人只发一次）。
+     *
+     * <p>专用服务端上玩家在别的机器上玩，客户端不知道地图服务监听在哪个端口，
+     * 必须由服务端告知；客户端据此拼出 {@code http://<服务器地址>:<端口>} 访问 F6 窗口与导航接口。
+     * 放在 tick 里而不是玩家登录事件里，是为了不依赖各加载器的登录事件。
+     */
+    private static void syncMapPort(MinecraftServer server) {
+        int port = MtrMapConfig.getActivePort();
+        java.util.Set<UUID> online = new java.util.HashSet<>();
+        for (net.minecraft.server.level.ServerPlayer player : server.getPlayerList().getPlayers()) {
+            UUID uuid = player.getUUID();
+            online.add(uuid);
+            if (portSynced.contains(uuid)) {
+                continue;
+            }
+            try {
+                // 发送成功才记账：个别加载器在玩家刚进来时还没准备好自定义包，
+                // 失败就留着下一 tick 再发，不要一次性放弃。
+                com.mtrmap.platform.Platform.get().sendMapPort(player, port);
+                portSynced.add(uuid);
+            } catch (Exception e) {
+                MtrMapCommon.LOGGER.warn("同步地图端口给玩家失败，稍后重试", e);
+            }
+        }
+        // 玩家退出后从集合里移除，下次进服重新同步（重复发送无害）
+        portSynced.retainAll(online);
     }
 
     /**
@@ -154,7 +221,8 @@ public final class MtrMapCommon {
                         + MapHttpServer.MAX_PORT_ATTEMPTS + " 个端口已被占满，地图服务无法开启！"));
             } else {
                 player.sendSystemMessage(literal("§e[MTR Map] 端口 " + portShiftFrom + " 已被占用，"
-                        + "地图服务已顺延到 " + portShiftTo + "，请访问 http://localhost:" + portShiftTo));
+                        + "地图服务已顺延到 " + portShiftTo + "；网页请用「服务器地址:" + portShiftTo
+                        + "」访问，游戏内 F6 窗口会自动使用这个端口。"));
             }
         }
     }
