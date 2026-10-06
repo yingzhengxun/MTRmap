@@ -66,6 +66,8 @@ public class MapScreen extends Screen {
 	/** 左侧堆叠上一帧占用的范围，用来挡住「点面板却选中了背后的车站」 */
 	private int leftStackRight;
 	private int leftStackBottom;
+	/** 详情面板上一帧的高度（路径面板要排在它下面） */
+	private int detailPanelH;
 	/** 路径查询模式 */
 	private boolean routeMode;
 	private long routeStartId = -1;
@@ -105,7 +107,15 @@ public class MapScreen extends Screen {
 	private static final int PAD = 6;
 	private static final int ROW = 18;
 	/** 工具栏按钮边长：11 个按钮竖排，要保证在小窗口（GUI 缩放 4）里也放得下 */
-	private static final int TOOL_W = 20;
+	private static final int TOOL_W = 16;
+	/** 详情 / 路径面板宽度（两者共用一个宽度，画与点击才能对得上） */
+	private static final int PANEL_W = 186;
+	/** 面板里一行的行高 */
+	private static final int LINE_H = 10;
+	/** 路径方案每一步占的高度（两步文字） */
+	private static final int STEP_H = 17;
+	/** 线路一览一排占的高度 */
+	private static final int ROUTE_ROW_H = 24;
 
 	public MapScreen() {
 		super(Component.translatable("key.mtrmap.map_title"));
@@ -256,7 +266,7 @@ public class MapScreen extends Screen {
 		SquaremapBridge.Result sm = SquaremapBridge.resolve();
 		if (!sm.ok()) {
 			sink.fill(0, 0, width, height, dark ? 0xFF14141C : 0xFFF2F2F6);
-			drawCenteredTextUnused(sink, sm.error == null ? "" : sm.error);
+			drawBaseMapHint(sink, sm.detail);
 			return;
 		}
 		double tileZoomExact = sm.maxZoom + Math.log(scale) / Math.log(2);
@@ -298,8 +308,14 @@ public class MapScreen extends Screen {
 		}
 	}
 
-	private void drawCenteredTextUnused(GuiSink sink, String text) {
-		sink.text(font, text, width / 2f, height / 2f, 0xFFFF8080, true);
+	/** 底图拿不到时，把原因写在屏幕中间（解析在后台重试，出问题也不阻塞渲染） */
+	private void drawBaseMapHint(GuiSink sink, String detail) {
+		if (detail == null || detail.isEmpty()) {
+			return;
+		}
+		sink.text(font, s("squaremap 底图不可用", "squaremap base map unavailable"),
+				width / 2f, height / 2f - 6, 0xFFFF8080, true);
+		sink.text(font, detail, width / 2f, height / 2f + 8, 0xFFFFC080, true);
 	}
 	// ===== 线网 =====
 
@@ -603,7 +619,7 @@ public class MapScreen extends Screen {
 		}
 
 		// 状态 + 图例
-		int infoH = 34;
+		int infoH = 31;
 		panel(sink, x, y, w, infoH);
 		String status = model.loaded
 				? s("车站 ", "Stations ") + model.stations.size()
@@ -611,9 +627,9 @@ public class MapScreen extends Screen {
 					+ s(" 车厂 ", " depots ") + model.depots.size()
 					+ s(" 列车 ", " trains ") + model.trains.size()
 				: s("正在加载...", "Loading...");
-		sink.textLeft(font, fit(status, w - 12), x + 4, y + 4, textColor(), false);
+		sink.textLeft(font, fit(status, w - 12), x + 4, y + 3, textColor(), false);
 		int lx = x + 4;
-		int ly = y + 20;
+		int ly = y + 18;
 		lx = legend(sink, lx, ly, 0xFFFFFFFF, alpha(0xFF7EC8E3, 1f), s("车站", "Station"));
 		lx = legend(sink, lx, ly, 0xFFFFFFFF, 0xFFFFD040, s("换乘", "Interchange"));
 		legend(sink, lx, ly, 0xFF50FA7B, 0xFF2DA84F, s("玩家", "Player"));
@@ -622,11 +638,11 @@ public class MapScreen extends Screen {
 		// 线路一览：每排最多 4 个
 		if (!model.routes.isEmpty()) {
 			int cols = Math.min(4, model.routes.size());
-			int cellW = Math.max(120, (w - (cols - 1) * 4) / cols);
+			int cellW = Math.max(100, (w - (cols - 1) * 4) / cols);
 			int rows = (model.routes.size() + cols - 1) / cols;
-			int listH = Math.min(rows, 8) * 30 + 6;
+			int maxRows = Math.min(rows, 7);
+			int listH = maxRows * ROUTE_ROW_H + 6;
 			panel(sink, x, y, w, listH);
-			int maxRows = Math.min(rows, 8);
 			for (int r = 0; r < maxRows; r++) {
 				for (int c = 0; c < cols; c++) {
 					int index = r * cols + c;
@@ -635,16 +651,16 @@ public class MapScreen extends Screen {
 					}
 					MapModel.Route route = model.routes.get(index);
 					int cx0 = x + 4 + c * (cellW + 4);
-					int cy0 = y + 4 + r * 30;
-					sink.fill(cx0, cy0 + 2, cx0 + 4, cy0 + 22, alpha(route.color, 1f));
+					int cy0 = y + 4 + r * ROUTE_ROW_H;
+					sink.fill(cx0, cy0 + 1, cx0 + 3, cy0 + 19, alpha(route.color, 1f));
 					String[] n = MapModel.splitName(route.name);
-					sink.textLeft(font, fit(n[0], cellW - 10), cx0 + 7, cy0 + 1, textColor(), false);
+					sink.textLeft(font, fit(n[0], cellW - 8), cx0 + 6, cy0, textColor(), false);
 					if (!n[1].isEmpty()) {
-						small(sink, fit(n[1], cellW - 10), cx0 + 7, cy0 + 12, dimColor());
+						small(sink, fit(n[1], cellW - 8), cx0 + 6, cy0 + 10, dimColor());
 					}
 					String ends = routeEnds(model, route);
 					if (!ends.isEmpty()) {
-						small(sink, fit(ends, cellW - 10), cx0 + 7, cy0 + 21, dimColor());
+						small(sink, fit(ends, cellW - 8), cx0 + 6, cy0 + 17, dimColor());
 					}
 				}
 			}
@@ -656,7 +672,7 @@ public class MapScreen extends Screen {
 	}
 
 	private int leftStackWidth() {
-		return Math.min(430, Math.max(190, width - 8 - 8 - TOOL_W - 12));
+		return Math.min(340, Math.max(170, width - 8 - 8 - TOOL_W - 12));
 	}
 
 	private String routeEnds(MapModel model, MapModel.Route route) {
@@ -730,11 +746,12 @@ public class MapScreen extends Screen {
 
 	private void drawDetailPanel(GuiSink sink) {
 		if (detailStation == null && detailRoute == null) {
+			detailPanelH = 0;
 			return;
 		}
 		MapModel model = MapDataClient.model();
-		int w = 220;
-		int x = width - 8 - TOOL_W - 8 - w;
+		int w = PANEL_W;
+		int x = width - 8 - TOOL_W - 6 - w;
 		int y = 8;
 		List<String> lines = new ArrayList<>();
 		String title;
@@ -743,13 +760,18 @@ public class MapScreen extends Screen {
 			title = english && !n[1].isEmpty() ? n[1] : n[0];
 			lines.add(s("坐标 ", "Coord ") + (int) detailStation.x + ", " + (int) detailStation.z);
 			lines.add(s("经过线路", "Lines"));
+			int shown = 0;
 			for (MapModel.Route route : model.routes) {
 				if (route.stations.contains(detailStation.id)) {
+					if (shown >= 8) {
+						break;
+					}
 					String[] rn = MapModel.splitName(route.name);
 					lines.add("· " + (english && !rn[1].isEmpty() ? rn[1] : rn[0]));
+					shown++;
 				}
 			}
-			if (lines.size() == 2) {
+			if (shown == 0) {
 				lines.add(s("暂无线路经过", "No lines"));
 			}
 		} else {
@@ -770,15 +792,16 @@ public class MapScreen extends Screen {
 				lines.add(s("班次间隔未知", "Headway unknown"));
 			}
 		}
-		int h = 24 + lines.size() * 11 + 8;
+		int h = 20 + lines.size() * LINE_H;
+		detailPanelH = h;
 		panel(sink, x, y, w, h);
-		sink.fill(x + 6, y + 6, x + 9, y + h - 6, alpha(detailRoute != null ? detailRoute.color : detailStation.color, 1f));
-		sink.textLeft(font, fit(title, w - 40), x + 14, y + 6, textColor(), false);
-		sink.textLeft(font, "×", x + w - 12, y + 6, dimColor(), false);
-		int cy = y + 22;
+		sink.fill(x + 5, y + 5, x + 8, y + h - 5, alpha(detailRoute != null ? detailRoute.color : detailStation.color, 1f));
+		sink.textLeft(font, fit(title, w - 34), x + 12, y + 4, textColor(), false);
+		sink.textLeft(font, "×", x + w - 11, y + 4, dimColor(), false);
+		int cy = y + 17;
 		for (String line : lines) {
-			sink.textLeft(font, fit(line, w - 20), x + 14, cy, dimColor(), false);
-			cy += 11;
+			sink.textLeft(font, fit(line, w - 18), x + 12, cy, dimColor(), false);
+			cy += LINE_H;
 		}
 	}
 
@@ -789,9 +812,9 @@ public class MapScreen extends Screen {
 			return;
 		}
 		MapModel model = MapDataClient.model();
-		int w = 224;
-		int x = width - 8 - TOOL_W - 8 - w;
-		int y = 8 + (detailStation != null || detailRoute != null ? 90 : 0);
+		int w = PANEL_W;
+		int x = width - 8 - TOOL_W - 6 - w;
+		int y = routePanelY();
 		List<String> lines = new ArrayList<>();
 		String head = s("路径查询", "Route planner");
 		String hint;
@@ -816,18 +839,19 @@ public class MapScreen extends Screen {
 		RoutePlanner.Option option = routeOptions.isEmpty() ? null
 				: routeOptions.get(Math.min(activeRouteTab, routeOptions.size() - 1));
 		// 步骤行数封顶：面板再高就要超出小窗口了（极复杂的换乘方案只显示前 7 步）
-		int shownSteps = option == null ? 0 : Math.min(option.steps.size(), 7);
-		// 面板高度要与下面的绘制顺序对齐：标题/hint 24 + 按钮行 14 + 按钮行下移 18
-		// + 若干提示行 + 方案标签页 12+16 + 每步 20
-		int h = 84 + lines.size() * 11 + shownSteps * 20;
+		int shownSteps = visibleStepCount();
+		// 面板高度必须与下面的绘制顺序对齐：
+		// 标题 4 / 提示 17 / 按钮行 29(高 13) / 若干提示行 / 方案标签页 11+2 / 概要 11 / 每步 18
+		int h = routePanelHeight();
 		panel(sink, x, y, w, h);
-		sink.textLeft(font, head, x + 6, y + 6, textColor(), false);
-		sink.textLeft(font, "×", x + w - 12, y + 6, dimColor(), false);
-		sink.textLeft(font, fit(hint, w - 12), x + 6, y + 20, dimColor(), false);
+		sink.textLeft(font, head, x + 6, y + 4, textColor(), false);
+		sink.textLeft(font, "×", x + w - 11, y + 4, dimColor(), false);
+		sink.textLeft(font, fit(hint, w - 12), x + 6, y + 17, dimColor(), false);
 
 		// 按钮行：立即查询 / 清除 / 我的位置
-		int by = y + 34;
-		int bw = (w - 18) / 3;
+		int by = y + 29;
+		int bh = 13;
+		int bw = (w - 15) / 3;
 		String[] labels = {s("立即查询", "Search"), s("清除", "Clear"), s("📍我的位置", "📍My location")};
 		String[] ids = {"go", "clear", "my"};
 		for (int i = 0; i < 3; i++) {
@@ -835,14 +859,14 @@ public class MapScreen extends Screen {
 			boolean enabled = !"go".equals(ids[i]) || (routeStartId >= 0 && routeEndId >= 0);
 			int bg = "go".equals(ids[i]) && routeStartId >= 0 && routeEndId >= 0
 					? 0xFF3B6FD4 : (dark ? 0xFF2A2A3C : 0xFFE4E4EC);
-			sink.fill(bx, by, bx + bw, by + 14, bg);
-			border(sink, bx, by, bw, 14, dark ? 0xFF3A3A4A : 0xFFBBBBCC);
-			sink.text(font, fit(labels[i], bw - 4), bx + bw / 2f, by + 4, enabled ? textColor() : dimColor(), false);
+			sink.fill(bx, by, bx + bw, by + bh, bg);
+			border(sink, bx, by, bw, bh, dark ? 0xFF3A3A4A : 0xFFBBBBCC);
+			sink.text(font, fit(labels[i], bw - 4), bx + bw / 2f, by + 3, enabled ? textColor() : dimColor(), false);
 		}
 		int cy = by + 18;
 		for (String line : lines) {
 			sink.textLeft(font, fit(line, w - 12), x + 6, cy, dimColor(), false);
-			cy += 11;
+			cy += LINE_H;
 		}
 		if (routeOptions.isEmpty()) {
 			return;
@@ -852,16 +876,16 @@ public class MapScreen extends Screen {
 		for (int i = 0; i < routeOptions.size(); i++) {
 			int tx = x + 6 + i * tabW;
 			boolean active = i == Math.min(activeRouteTab, routeOptions.size() - 1);
-			sink.fill(tx, cy, tx + tabW - 2, cy + 12, active ? 0xFF3B5180 : (dark ? 0xFF2A2A3C : 0xFFE4E4EC));
-			sink.text(font, routeOptions.get(i).mode.label, tx + (tabW - 2) / 2f, cy + 2, textColor(), false);
+			sink.fill(tx, cy, tx + tabW - 2, cy + 11, active ? 0xFF3B5180 : (dark ? 0xFF2A2A3C : 0xFFE4E4EC));
+			sink.text(font, routeOptions.get(i).mode.label, tx + (tabW - 2) / 2f, cy + 1, textColor(), false);
 		}
-		cy += 16;
+		cy += 13;
 		// 概要
 		String summary = s("总距离 ", "Dist ") + fmtDist(option.dist)
 				+ s(" · 预计 ", " · ~") + fmtMinutes(option.timeSec)
 				+ s(" · 换乘 ", " · transfers ") + option.transfers;
 		sink.textLeft(font, fit(summary, w - 12), x + 6, cy, 0xFF7EC8E3, false);
-		cy += 12;
+		cy += 11;
 		for (int stepIndex = 0; stepIndex < shownSteps; stepIndex++) {
 			RoutePlanner.Step step = option.steps.get(stepIndex);
 			if (step.walk) {
@@ -870,18 +894,32 @@ public class MapScreen extends Screen {
 				sink.textLeft(font, fit(s("步行 " + Math.round(step.dist) + " 米 往" + dir,
 						"Walk " + Math.round(step.dist) + "m " + dir), w - 20), x + 12, cy, dimColor(), false);
 				sink.textLeft(font, fit(s("到 ", "to ") + (to == null ? "" : stationLabel(to)), w - 20),
-						x + 12, cy + 10, dimColor(), false);
+						x + 12, cy + 9, dimColor(), false);
 			} else {
-				sink.fill(x + 6, cy + 1, x + 9, cy + 11, alpha(step.routeColor, 1f));
+				sink.fill(x + 6, cy + 1, x + 8, cy + 10, alpha(step.routeColor, 1f));
 				sink.textLeft(font, fit(step.routeName + " " + s("开往 ", "to ")
 						+ (step.terminalId == null ? "" : stationLabel(model.station(step.terminalId))), w - 22),
 						x + 12, cy, textColor(), false);
 				MapModel.Station to = model.station(step.stations.get(step.stations.size() - 1));
 				sink.textLeft(font, fit((step.stations.size() - 1) + s(" 站 → ", " stops -> ")
-						+ (to == null ? "" : stationLabel(to)), w - 22), x + 12, cy + 10, dimColor(), false);
+						+ (to == null ? "" : stationLabel(to)), w - 22), x + 12, cy + 9, dimColor(), false);
 			}
-			cy += 20;
+			cy += STEP_H;
 		}
+	}
+
+	/** 路径面板的顶部 y：紧跟在详情面板下面 */
+	private int routePanelY() {
+		return 8 + (detailPanelH > 0 ? detailPanelH + 6 : 0);
+	}
+
+	/** 当前方案实际画出来的步数（与 drawRoutePanel 的封顶保持一致） */
+	private int visibleStepCount() {
+		if (routeOptions.isEmpty()) {
+			return 0;
+		}
+		RoutePlanner.Option option = routeOptions.get(Math.min(activeRouteTab, routeOptions.size() - 1));
+		return Math.min(option.steps.size(), 7);
 	}
 
 	// ===== 行程记录弹窗 =====
@@ -1723,27 +1761,27 @@ public class MapScreen extends Screen {
 	// ===== 点击分区 =====
 
 	private boolean detailCloseHit(double mouseX, double mouseY) {
-		int w = 220;
-		int x = width - 8 - TOOL_W - 8 - w;
-		return mouseX >= x && mouseX <= x + w && mouseY >= 8 && mouseY <= 32;
+		int w = PANEL_W;
+		int x = width - 8 - TOOL_W - 6 - w;
+		return mouseX >= x && mouseX <= x + w && mouseY >= 8 && mouseY <= 8 + 15;
 	}
 
 	private boolean routePanelHit(double mouseX, double mouseY) {
-		int w = 224;
-		int x = width - 8 - TOOL_W - 8 - w;
-		int y = 8 + (detailStation != null || detailRoute != null ? 90 : 0);
-		if (mouseX < x || mouseX > x + w || mouseY < y) {
+		int w = PANEL_W;
+		int x = width - 8 - TOOL_W - 6 - w;
+		int y = routePanelY();
+		if (mouseX < x || mouseX > x + w || mouseY < y || mouseY > y + routePanelHeight()) {
 			return false;
 		}
 		// 关闭
-		if (mouseY <= y + 20 && mouseX >= x + w - 20) {
+		if (mouseY <= y + 16 && mouseX >= x + w - 20) {
 			setRouteMode(false);
 			return true;
 		}
 		// 按钮行
-		int by = y + 34;
-		if (mouseY >= by && mouseY <= by + 14) {
-			int bw = (w - 18) / 3;
+		int by = y + 29;
+		if (mouseY >= by && mouseY <= by + 13) {
+			int bw = (w - 15) / 3;
 			int index = (int) ((mouseX - x - 6) / (bw + 3));
 			if (index >= 0 && index < 3) {
 				if (index == 0) {
@@ -1764,7 +1802,7 @@ public class MapScreen extends Screen {
 		// 方案标签页
 		if (!routeOptions.isEmpty()) {
 			int tabsY = by + 18 + panelLinesHeight();
-			if (mouseY >= tabsY && mouseY <= tabsY + 12) {
+			if (mouseY >= tabsY && mouseY <= tabsY + 11) {
 				int tabW = (w - 12) / routeOptions.size();
 				int index = (int) ((mouseX - x - 6) / tabW);
 				if (index >= 0 && index < routeOptions.size()) {
@@ -1778,6 +1816,7 @@ public class MapScreen extends Screen {
 		return true;
 	}
 
+	/** 路径面板顶部那几行提示占的高度 */
 	private int panelLinesHeight() {
 		int lines = 0;
 		if (startWalk != null) {
@@ -1786,7 +1825,15 @@ public class MapScreen extends Screen {
 		if (routeMessage != null) {
 			lines++;
 		}
-		return lines * 11;
+		return lines * LINE_H;
+	}
+
+	/** 路径面板高度（画与点击必须用同一个值） */
+	private int routePanelHeight() {
+		if (routeOptions.isEmpty()) {
+			return 53 + panelLinesHeight();
+		}
+		return 74 + panelLinesHeight() + visibleStepCount() * STEP_H;
 	}
 
 	private void onToolbar(String id) {

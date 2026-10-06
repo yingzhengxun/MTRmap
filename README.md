@@ -58,7 +58,7 @@
 | `showDepots` | 是否显示车厂 |
 | `port` | HTTP 服务端口，默认 `1145`。被占用时自动往后顺延到第一个可用端口，并在玩家进游戏时于消息栏提示实际端口 |
 
-游戏内地图窗口的底图端口直接取 squaremap 自己的配置（`config/squaremap/config.yml` 的 `httpd.port`，默认 `8080`）。
+游戏内地图窗口的底图端口取自 squaremap 自己的配置（`settings.internal-webserver.port`，默认 `8080`）；模组会按「squaremap 配置里的端口 → `config/squaremap/config.yml` → 8080 → squaremap 公布的 Web 地址」逐个试连 `tiles/settings.json`，第一个连通的才用来取瓦片；解析在后台线程进行，拿不到底图时会在窗口中央写明原因（同时在日志里打出 `游戏内地图：squaremap 底图不可用（...）`）。
 
 行程记录落盘在 `mods/mapconfig/mtrmap_trips.json`（按玩家 UUID 归档，网页端展示与删除）。
 
@@ -200,7 +200,7 @@ The config file lives at `mods/mapconfig/mtrmap.json` and is created automatical
 | `showDepots` | Whether to display depots |
 | `port` | HTTP server port, defaults to `1145`. If it is taken, the server shifts to the next free port and notifies players in chat with the actual port |
 
-The in-game map window reads its tile port straight from squaremap's own config (`httpd.port` in `config/squaremap/config.yml`, default `8080`).
+The in-game map window reads its tile port from squaremap's own config (`settings.internal-webserver.port`, default `8080`). The mod probes `tiles/settings.json` against a list of candidates — squaremap's configured port, `config/squaremap/config.yml`, 8080, then squaremap's advertised web address — and uses the first one that answers; resolution runs on a background thread, and if no base map can be reached the reason is printed in the middle of the window (and logged as `游戏内地图：squaremap 底图不可用（...）`).
 
 Trip records are persisted to `mods/mapconfig/mtrmap_trips.json` (archived per player UUID; shown and deletable from the web map).
 

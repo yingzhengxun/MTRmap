@@ -206,7 +206,8 @@ public final class MapExporter {
 	}
 
 	private static void drawTiles(Graphics2D g, int expW, int expH, double scale, double offX, double offY) {
-		SquaremapBridge.Result sm = SquaremapBridge.resolve();
+		// 导出在后台线程跑，等得起：确保拿到确定的 squaremap 底图信息
+		SquaremapBridge.Result sm = SquaremapBridge.await(3000L);
 		if (!sm.ok() || scale <= 0) {
 			return;
 		}
