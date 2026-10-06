@@ -37,3 +37,11 @@ mandatory = true
 versionRange = "${minecraft}"
 ordering = "NONE"
 side = "BOTH"
+
+# 底图取自 Xaero 的世界地图数据，因此它是硬前置
+[[dependencies.${id}]]
+modId = "xaeroworldmap"
+mandatory = true
+versionRange = "${xaero}"
+ordering = "AFTER"
+side = "BOTH"

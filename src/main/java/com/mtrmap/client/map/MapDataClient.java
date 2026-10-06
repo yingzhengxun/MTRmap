@@ -61,6 +61,7 @@ public final class MapDataClient {
 		active = false;
 		current = EMPTY;
 		TileTextures.clear();
+		XaeroMapTiles.clear();
 		WorldMapBridge.invalidate();
 	}
 
@@ -166,6 +167,33 @@ public final class MapDataClient {
 			}
 		} catch (Throwable t) {
 			return null;
+		} finally {
+			if (conn != null) {
+				conn.disconnect();
+			}
+		}
+	}
+
+	/**
+	 * 同步 POST 二进制（上传底图瓦片给服务端，供网页地图使用）。
+	 *
+	 * @return 是否成功
+	 */
+	public static boolean postBytes(String path, byte[] body) {
+		HttpURLConnection conn = null;
+		try {
+			conn = (HttpURLConnection) new URL(base() + path).openConnection();
+			conn.setConnectTimeout(TIMEOUT_MS);
+			conn.setReadTimeout(TIMEOUT_MS);
+			conn.setRequestMethod("POST");
+			conn.setDoOutput(true);
+			conn.setRequestProperty("Content-Type", "image/png");
+			try (OutputStream os = conn.getOutputStream()) {
+				os.write(body);
+			}
+			return conn.getResponseCode() == 200;
+		} catch (Throwable t) {
+			return false;
 		} finally {
 			if (conn != null) {
 				conn.disconnect();

@@ -20,9 +20,9 @@ import java.util.List;
 /**
  * 游戏内地图窗口（F6 打开）。
  *
- * <p>底图是自研世界地图的瓦片（{@code /api/worldmap/<z>/<x>_<y>.png}），
- * 上面叠 MTR 线网、车站、车厂、列车与玩家；交互与网页地图一致：
- * 拖拽平移、滚轮缩放、点车站看详情、路径查询并把路线同步到游戏内导航。
+ * <p>底图是 Xaero 世界地图的地图贴图（见 {@link XaeroMapTiles}），合成后按瓦片
+ * （{@code /api/worldmap/<z>/<x>_<y>.png}）画出来；上面叠 MTR 线网、车站、车厂、列车与玩家；
+ * 交互与网页地图一致：拖拽平移、滚轮缩放、点车站看详情、路径查询并把路线同步到游戏内导航。
  *
  * <p>所有坐标都用世界坐标（x = 东、z = 南），屏幕换算：
  * {@code sx = width/2 + (x - centerX) * scale}，与网页的 worldToCanvas 同一套公式。
@@ -103,6 +103,9 @@ public class MapScreen extends Screen {
 	private int toastColor = 0xFF9BE59B;
 	private long toastUntil;
 
+	/** 打开窗口的时刻：底图是逐步补齐的，太早提示「没有底图」没意义 */
+	private long openedAt;
+
 	private static final int PAD = 6;
 	private static final int ROW = 18;
 	/** 工具栏按钮边长：11 个按钮竖排，要保证在小窗口（GUI 缩放 4）里也放得下 */
@@ -125,6 +128,7 @@ public class MapScreen extends Screen {
 	@Override
 	protected void init() {
 		super.init();
+		openedAt = System.currentTimeMillis();
 		MapDataClient.open();
 		if (!viewInitialized) {
 			viewInitialized = true;
@@ -259,7 +263,7 @@ public class MapScreen extends Screen {
 		// 本窗口没有任何原版控件，绘制全部由上面的 GuiSink 完成。
 	}
 
-	// ===== 底图：自研世界地图瓦片 =====
+	// ===== 底图：Xaero 世界地图的瓦片 =====
 
 	private void drawTileBackground(GuiSink sink) {
 		WorldMapBridge.Settings wm = WorldMapBridge.settings();
@@ -288,22 +292,30 @@ public class MapScreen extends Screen {
 			sink.fill(0, 0, width, height, dark ? 0xFF14141C : 0xFFF2F2F6);
 			return;
 		}
+		// 让 Xaero 自己按需把这片区域的贴图准备好：底图是逐步补齐的
+		XaeroMapTiles.preload(tileZoom, tx0, ty0, tx1, ty1);
 		// 底图底色：瓦片还没到之前先垫一层，避免闪烁
 		sink.fill(0, 0, width, height, dark ? 0xFF0F0F16 : 0xFFE8E8EE);
 		sink.flush();
 
+		int drawn = 0;
 		for (int ty = ty0; ty <= ty1; ty++) {
 			for (int tx = tx0; tx <= tx1; tx++) {
 				ResourceLocation texture = TileTextures.get(tileZoom, tx, ty);
 				if (texture == null) {
 					continue;
 				}
+				drawn++;
 				double sx = worldToScreenX(tx * (double) blocksPerTile);
 				double sy = worldToScreenY(ty * (double) blocksPerTile);
 				// 相邻瓦片各多铺 0.5px，避免浮点截断出现缝隙
 				sink.texture(texture, (float) sx, (float) sy,
 						(float) (tileScreenSize + 0.5), (float) (tileScreenSize + 0.5));
 			}
+		}
+		// 一张都没画出来才提示；刚打开的一两秒内什么都不说，底图本来就要等一下
+		if (drawn == 0 && System.currentTimeMillis() - openedAt > 2000L) {
+			drawBaseMapPending(sink);
 		}
 	}
 
@@ -315,6 +327,19 @@ public class MapScreen extends Screen {
 		sink.text(font, s("世界地图底图不可用", "world map base layer unavailable"),
 				width / 2f, height / 2f - 6, 0xFFFF8080, true);
 		sink.text(font, detail, width / 2f, height / 2f + 8, 0xFFFFC080, true);
+	}
+
+	/** 底图一张都没画出来：区分「接入 Xaero 出了问题」和「Xaero 这块还没数据」 */
+	private void drawBaseMapPending(GuiSink sink) {
+		String problem = XaeroMapTiles.status();
+		if (problem != null) {
+			drawBaseMapHint(sink, problem);
+			return;
+		}
+		sink.text(font, s("底图准备中", "preparing base map"),
+				width / 2f, height / 2f - 6, 0xFFFFC080, true);
+		sink.text(font, s("Xaero 还没有这片区域的地图数据", "Xaero has no map data for this area yet"),
+				width / 2f, height / 2f + 8, 0xFF9BA0B0, true);
 	}
 	// ===== 线网 =====
 

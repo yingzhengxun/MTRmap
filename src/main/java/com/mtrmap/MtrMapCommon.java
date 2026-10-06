@@ -124,14 +124,11 @@ public final class MtrMapCommon {
         NavTaskStore.clear();
         TripStore.clear();
         MapDataCollector.clearRailwayData();
-        com.mtrmap.server.WorldMapTiles.clear();
     }
 
     /** 每个 tick 末更新玩家位置。 */
     public static void onServerTick(MinecraftServer server) {
         PlayerTracker.update(server);
-        // 自研世界地图：在玩家周围补采已加载区块（只读，不触发世界生成）
-        com.mtrmap.server.WorldMapTiles.tick(server);
         notifyPortStatus(server);
     }
 

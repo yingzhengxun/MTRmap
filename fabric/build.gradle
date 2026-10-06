@@ -70,6 +70,7 @@ processResources {
             name        : rootProject.property("mod.name"),
             minecraft   : commonProject.property("mod.mc_dep_fabric"),
             mtr         : commonProject.property("mod.mtr_dep"),
+            xaero       : rootProject.property("mod.xaero_dep"),
             java_compat : javaCompat
     ]
     inputs.properties props

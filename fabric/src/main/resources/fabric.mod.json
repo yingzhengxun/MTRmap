@@ -26,6 +26,7 @@
     "minecraft": "${minecraft}",
     "java": ">=${java_compat}",
     "fabric": "*",
-    "mtr": "${mtr}"
+    "mtr": "${mtr}",
+    "xaeroworldmap": "${xaero}"
   }
 }

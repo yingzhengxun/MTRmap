@@ -5,11 +5,11 @@ import com.google.gson.JsonObject;
 import com.mtrmap.MtrMapCommon;
 
 /**
- * 自研世界地图（底图）接入：向本模组自己的 HTTP 服务要瓦片参数与瓦片，
- * 不依赖 squaremap 等外部地图模组。
+ * 世界地图（底图）接入：向本模组自己的 HTTP 服务要瓦片参数与瓦片路径。
  *
- * <p>参数（瓦片边长、缩放范围）在一次会话里不会变，所以只在后台线程取一次；
- * 渲染线程只读缓存结果，取不到时 {@link Settings#ok()} 为 false，由界面给出提示。
+ * <p>参数（瓦片边长、缩放范围）写死在服务端，客户端与网页都从它这里取，保证两边一套约定；
+ * 一次会话里不会变，所以只在后台线程取一次，渲染线程只读缓存结果，
+ * 取不到时 {@link Settings#ok()} 为 false，由界面给出提示。
  */
 public final class WorldMapBridge {
 

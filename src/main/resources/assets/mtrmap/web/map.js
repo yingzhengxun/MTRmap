@@ -278,7 +278,7 @@
 	let players = [];
 	let stationMap = {};
 	let avatarCache = {};
-	// 自研世界地图底图：服务端渲染的瓦片参数与图片缓存
+	// 世界地图底图：瓦片参数与图片缓存（瓦片由游戏客户端用 Xaero 的地图数据合成后上传）
 	let worldMapSettings = null;      // {tileSize, maxZoom, minZoom, ...}，会话内固定；未拿到时为 null
 	const worldMapTiles = {};         // "z/tx_ty" -> Image（加载中或已加载）
 	const worldMapFailed = {};        // "z/tx_ty" -> 失败时间戳（404 表示该区域尚未采样）
@@ -759,7 +759,7 @@
 		} catch (e) { /* silent */ }
 	}
 
-	// 获取自研世界地图的瓦片参数。服务器可能尚未就绪，失败时每 5 秒重试一次
+	// 获取世界地图的瓦片参数。服务器可能尚未就绪，失败时每 5 秒重试一次
 	function loadWorldMapSettings() {
 		fetch('/api/worldmap/settings')
 			.then(resp => {
@@ -778,7 +778,7 @@
 	function render() {
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
 		drawBackground();
-		// 自研世界地图底图：画在网格之上、列车网络之下；出错也不能影响后续绘制
+		// 世界地图底图：画在网格之上、列车网络之下；出错也不能影响后续绘制
 		try { drawWorldMapBase(); } catch (e) { /* ignore */ }
 		drawDepots();
 		// 路径查询模式下线路改为「相邻车站直线」的示意图
@@ -819,7 +819,7 @@
 		ctx.stroke();
 	}
 
-	// 绘制自研世界地图底图。瓦片坐标约定与服务端一致：
+	// 绘制世界地图底图（瓦片由游戏客户端用 Xaero 的地图数据合成后上传）。瓦片坐标约定与客户端一致：
 	// 在层级 z，1 像素 = 2^(maxZoom - z) 个方块，故一块瓦片覆盖 tileSize * 2^(maxZoom-z) 个方块。
 	function drawWorldMapBase() {
 		if (!worldMapSettings) return;
@@ -3082,7 +3082,7 @@
 		setupInteraction();
 		window.addEventListener('resize', resizeCanvas);
 		refreshData();
-		// 拉取自研世界地图参数（失败会自动重试），拿到后底图才会出现
+		// 拉取世界地图参数（失败会自动重试），拿到后底图才会出现
 		loadWorldMapSettings();
 		// 识别当前访问者是不是游戏内玩家（是则左上角显示头像与用户名）
 		fetchWhoAmI();

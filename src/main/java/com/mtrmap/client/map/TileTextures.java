@@ -17,11 +17,13 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * 自研世界地图瓦片纹理缓存。
+ * 世界地图瓦片纹理缓存。
  *
- * <p>瓦片是 512×512 的 PNG，从本模组自己的 HTTP 服务拉取；解码与网络都在后台线程完成，
- * 纹理注册（必须回渲染线程）通过 {@link Minecraft#execute} 投递。缓存按 LRU 淘汰，
- * 超出上限的纹理调用 {@code TextureManager.release} 释放显存。
+ * <p>瓦片是 512×512 的 PNG：像素来自本机 Xaero 的地图贴图（{@link XaeroMapTiles}），
+ * 读显存只能在渲染线程做，所以 {@link #get} 这一侧先把像素取出来，编码 PNG、上传给服务端
+ * （网页地图用）、以及解码注册纹理都交给后台线程；纹理注册（必须回渲染线程）通过
+ * {@link Minecraft#execute} 投递。缓存按 LRU 淘汰，超出上限的纹理调用
+ * {@code TextureManager.release} 释放显存。
  *
  * <p>尚未就绪的瓦片返回 null，由调用方跳过；下一帧会再问一次。
  */
@@ -31,8 +33,12 @@ public final class TileTextures {
 	private static final int MAX_TEXTURES = 160;
 	/** 与服务端的并发连接数上限 */
 	private static final int WORKERS = 3;
-	/** 一次渲染内最多发起多少张新瓦片请求，避免缩放瞬间打出上百个请求 */
-	private static final int MAX_REQUESTS_PER_FRAME = 6;
+	/** 一次渲染内最多合成多少张新瓦片：合成要在渲染线程读显存，不能一次读太多 */
+	private static final int MAX_REQUESTS_PER_FRAME = 2;
+	/** 取不到数据后的重试间隔 */
+	private static final long FAILED_RETRY_MS = 10_000L;
+	/** 瓦片存活时间：Xaero 的地图会随探索更新，到点重新合成一次 */
+	private static final long REFRESH_MS = 120_000L;
 
 	private static final Map<String, Entry> ENTRIES = new ConcurrentHashMap<>();
 	/** 访问顺序（LRU）：末尾是最新的 */
@@ -61,6 +67,7 @@ public final class TileTextures {
 		volatile ResourceLocation location;
 		volatile boolean failed;
 		volatile long failedAt;
+		volatile long createdAt;
 	}
 
 	/**
@@ -73,12 +80,18 @@ public final class TileTextures {
 	public static ResourceLocation get(int zoom, int tileX, int tileY) {
 		String key = zoom + "/" + tileX + "_" + tileY;
 		Entry entry = ENTRIES.get(key);
+		long now = System.currentTimeMillis();
 		if (entry == null) {
 			entry = new Entry();
 			ENTRIES.put(key, entry);
 			request(key, zoom, tileX, tileY, entry);
-		} else if (entry.failed && System.currentTimeMillis() - entry.failedAt > 10_000L) {
-			// 暂时失败（服务端还没采到这块数据）允许重试
+		} else if (entry.location != null && now - entry.createdAt > REFRESH_MS) {
+			// 到点了：放掉旧的重新合成，好让新探索到的地形、刚补齐的粗贴图出现
+			Minecraft.getInstance().getTextureManager().release(entry.location);
+			entry.location = null;
+			entry.createdAt = now;
+			request(key, zoom, tileX, tileY, entry);
+		} else if (entry.failed && now - entry.failedAt > FAILED_RETRY_MS) {
 			entry.failed = false;
 			request(key, zoom, tileX, tileY, entry);
 		}
@@ -91,14 +104,28 @@ public final class TileTextures {
 
 	private static void request(String key, int zoom, int tileX, int tileY, Entry entry) {
 		if (requestsThisFrame >= MAX_REQUESTS_PER_FRAME || IN_FLIGHT.get() >= WORKERS * 4) {
+			// 这帧排不上了，留着下一帧再来（failedAt = 0 让它立刻可重试）
+			entry.failed = true;
+			entry.failedAt = 0L;
 			return;
 		}
 		requestsThisFrame++;
-		IN_FLIGHT.incrementAndGet();
+		WorldMapBridge.Settings settings = WorldMapBridge.settings();
+		// 底图直接来自本机 Xaero 的地图贴图，而读显存只能在渲染线程做，所以先在这里取像素
+		int[] pixels = settings.ok() ? XaeroMapTiles.tilePixels(zoom, tileX, tileY) : null;
+		int size = settings.tileSize;
 		String path = WorldMapBridge.tilePath(zoom, tileX, tileY);
+		IN_FLIGHT.incrementAndGet();
 		POOL.execute(() -> {
 			try {
-				byte[] bytes = MapDataClient.getBytes(path);
+				byte[] bytes = pixels == null ? null : XaeroMapTiles.encodePng(pixels, size);
+				if (bytes != null) {
+					// 顺手传给服务端：网页地图用的就是这批瓦片
+					MapDataClient.postBytes(path, bytes);
+				} else {
+					// 本机这块还没数据，先看看服务端有没有别人传过的
+					bytes = MapDataClient.getBytes(path);
+				}
 				if (bytes == null || bytes.length == 0) {
 					entry.failed = true;
 					entry.failedAt = System.currentTimeMillis();
@@ -131,6 +158,8 @@ public final class TileTextures {
 			//?}
 			Minecraft.getInstance().getTextureManager().register(location, new DynamicTexture(image));
 			entry.location = location;
+			entry.failed = false;
+			entry.createdAt = System.currentTimeMillis();
 			markUsed(key);
 			evictIfNeeded();
 		} catch (Throwable t) {
