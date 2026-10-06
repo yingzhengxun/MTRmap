@@ -138,7 +138,6 @@ if (bridgePlatformPaths.size() >= 2 && project.path == ":${mc}") {
     def mcDepFabric = property("mod.mc_dep_fabric").toString()
     def mcDepForgelike = property("mod.mc_dep_forgelike").toString()
     def mtrDep = property("mod.mtr_dep").toString()
-    def xaeroDep = property("mod.xaero_dep").toString()
     def fabricLoader = property("deps.fabric_loader").toString()
     def hasForge = platforms.contains("forge")
     def hasNeoForge = platforms.contains("neoforge")
@@ -159,7 +158,6 @@ if (bridgePlatformPaths.size() >= 2 && project.path == ":${mc}") {
         inputs.property "mcDepFabric", mcDepFabric
         inputs.property "mcDepForgelike", mcDepForgelike
         inputs.property "mtrDep", mtrDep
-        inputs.property "xaeroDep", xaeroDep
         inputs.property "fabricLoader", fabricLoader
         inputs.property "fmlLoaderVersion", fmlLoaderVersion
         inputs.property "neoforgeVersion", neoforgeVersion
@@ -233,13 +231,6 @@ ordering = "AFTER"
 side = "BOTH"
 
 [[dependencies.${bridgeId}]]
-modId = "xaeroworldmap"
-mandatory = true
-versionRange = "${xaeroDep}"
-ordering = "AFTER"
-side = "BOTH"
-
-[[dependencies.${bridgeId}]]
 modId = "forge"
 mandatory = true
 versionRange = "[${fmlLoaderVersion},)"
@@ -274,13 +265,6 @@ description = '''
 modId = "mtr"
 type = "required"
 versionRange = "${mtrDep}"
-ordering = "AFTER"
-side = "BOTH"
-
-[[dependencies.${bridgeId}]]
-modId = "xaeroworldmap"
-type = "required"
-versionRange = "${xaeroDep}"
 ordering = "AFTER"
 side = "BOTH"
 

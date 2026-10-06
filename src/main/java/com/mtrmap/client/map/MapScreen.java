@@ -10,7 +10,6 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import org.lwjgl.glfw.GLFW;
 
 import java.io.File;
@@ -20,8 +19,7 @@ import java.util.List;
 /**
  * 游戏内地图窗口（F6 打开）。
  *
- * <p>底图是 Xaero 世界地图的地图贴图（见 {@link XaeroMapTiles}），合成后按瓦片
- * （{@code /api/worldmap/<z>/<x>_<y>.png}）画出来；上面叠 MTR 线网、车站、车厂、列车与玩家；
+ * <p>没有底图：纯色背景上直接叠 MTR 线网、车站、车厂、列车与玩家；
  * 交互与网页地图一致：拖拽平移、滚轮缩放、点车站看详情、路径查询并把路线同步到游戏内导航。
  *
  * <p>所有坐标都用世界坐标（x = 东、z = 南），屏幕换算：
@@ -32,8 +30,8 @@ public class MapScreen extends Screen {
 	// ===== 相机 =====
 	private static final double MIN_SCALE = 0.02;
 	private static final double MAX_SCALE = 4.0;
-	/** 一屏需要绘制的瓦片上限，超过就只画纯色底，避免缩得太小时铺满屏幕 */
-	private static final int MAX_TILES = 480;
+	/** 左键从按下到移动多少像素才当成「拖地图」，小于它算「点一下」 */
+	private static final double DRAG_THRESHOLD = 4.0;
 
 	private double centerX;
 	private double centerZ;
@@ -41,10 +39,13 @@ public class MapScreen extends Screen {
 	private boolean viewInitialized;
 
 	// ===== 交互 =====
+	/** 左键按在地图上（还没松开）：松开时若没拖动过就当成点站 */
+	private boolean pressed;
+	private double pressX;
+	private double pressY;
 	private boolean dragging;
 	private double dragLastX;
 	private double dragLastY;
-	private boolean dragMoved;
 
 	// ===== 界面状态 =====
 	private boolean showDepots = true;
@@ -103,9 +104,6 @@ public class MapScreen extends Screen {
 	private int toastColor = 0xFF9BE59B;
 	private long toastUntil;
 
-	/** 打开窗口的时刻：底图是逐步补齐的，太早提示「没有底图」没意义 */
-	private long openedAt;
-
 	private static final int PAD = 6;
 	private static final int ROW = 18;
 	/** 工具栏按钮边长：11 个按钮竖排，要保证在小窗口（GUI 缩放 4）里也放得下 */
@@ -128,7 +126,6 @@ public class MapScreen extends Screen {
 	@Override
 	protected void init() {
 		super.init();
-		openedAt = System.currentTimeMillis();
 		MapDataClient.open();
 		if (!viewInitialized) {
 			viewInitialized = true;
@@ -143,6 +140,10 @@ public class MapScreen extends Screen {
 	@Override
 	public void removed() {
 		MapDataClient.close();
+		// 窗口关掉时把按键状态清掉：否则「按着鼠标开地图 / 在外边松开」会让地图一直跟着指针跑
+		pressed = false;
+		dragging = false;
+		qualityDragging = false;
 		super.removed();
 	}
 
@@ -231,11 +232,10 @@ public class MapScreen extends Screen {
 			depotsInitialized = true;
 			showDepots = model.showDepots;
 		}
-		TileTextures.beginFrame();
 		GuiSink sink = new GuiSink(graphics);
 		hoverText = null;
 
-		drawTileBackground(sink);
+		drawBackground(sink);
 		drawDepots(sink, model);
 		drawRoutes(sink, model);
 		drawHighlight(sink, model);
@@ -263,83 +263,11 @@ public class MapScreen extends Screen {
 		// 本窗口没有任何原版控件，绘制全部由上面的 GuiSink 完成。
 	}
 
-	// ===== 底图：Xaero 世界地图的瓦片 =====
+	// ===== 背景 =====
 
-	private void drawTileBackground(GuiSink sink) {
-		WorldMapBridge.Settings wm = WorldMapBridge.settings();
-		if (!wm.ok()) {
-			sink.fill(0, 0, width, height, dark ? 0xFF14141C : 0xFFF2F2F6);
-			drawBaseMapHint(sink, wm.detail);
-			return;
-		}
-		double tileZoomExact = wm.maxZoom + Math.log(scale) / Math.log(2);
-		int tileZoom = (int) Math.floor(tileZoomExact);
-		tileZoom = Math.max(wm.minZoom, Math.min(wm.maxZoom, tileZoom));
-		double tileScale = Math.pow(2, tileZoom - wm.maxZoom);
-		double tileScreenSize = wm.tileSize * scale / tileScale;
-
-		double worldLeft = screenToWorldX(0);
-		double worldRight = screenToWorldX(width);
-		double worldTop = screenToWorldZ(0);
-		double worldBottom = screenToWorldZ(height);
-		long blocksPerTile = Math.round(wm.tileSize / tileScale);
-		int tx0 = (int) Math.floor(worldLeft / blocksPerTile);
-		int tx1 = (int) Math.floor(worldRight / blocksPerTile);
-		int ty0 = (int) Math.floor(worldTop / blocksPerTile);
-		int ty1 = (int) Math.floor(worldBottom / blocksPerTile);
-		long count = (long) (tx1 - tx0 + 1) * (ty1 - ty0 + 1);
-		if (count > MAX_TILES) {
-			sink.fill(0, 0, width, height, dark ? 0xFF14141C : 0xFFF2F2F6);
-			return;
-		}
-		// 让 Xaero 自己按需把这片区域的贴图准备好：底图是逐步补齐的
-		XaeroMapTiles.preload(tileZoom, tx0, ty0, tx1, ty1);
-		// 底图底色：瓦片还没到之前先垫一层，避免闪烁
-		sink.fill(0, 0, width, height, dark ? 0xFF0F0F16 : 0xFFE8E8EE);
-		sink.flush();
-
-		int drawn = 0;
-		for (int ty = ty0; ty <= ty1; ty++) {
-			for (int tx = tx0; tx <= tx1; tx++) {
-				ResourceLocation texture = TileTextures.get(tileZoom, tx, ty);
-				if (texture == null) {
-					continue;
-				}
-				drawn++;
-				double sx = worldToScreenX(tx * (double) blocksPerTile);
-				double sy = worldToScreenY(ty * (double) blocksPerTile);
-				// 相邻瓦片各多铺 0.5px，避免浮点截断出现缝隙
-				sink.texture(texture, (float) sx, (float) sy,
-						(float) (tileScreenSize + 0.5), (float) (tileScreenSize + 0.5));
-			}
-		}
-		// 一张都没画出来才提示；刚打开的一两秒内什么都不说，底图本来就要等一下
-		if (drawn == 0 && System.currentTimeMillis() - openedAt > 2000L) {
-			drawBaseMapPending(sink);
-		}
-	}
-
-	/** 底图拿不到时，把原因写在屏幕中间（参数在后台重试，出问题也不阻塞渲染） */
-	private void drawBaseMapHint(GuiSink sink, String detail) {
-		if (detail == null || detail.isEmpty()) {
-			return;
-		}
-		sink.text(font, s("世界地图底图不可用", "world map base layer unavailable"),
-				width / 2f, height / 2f - 6, 0xFFFF8080, true);
-		sink.text(font, detail, width / 2f, height / 2f + 8, 0xFFFFC080, true);
-	}
-
-	/** 底图一张都没画出来：区分「接入 Xaero 出了问题」和「Xaero 这块还没数据」 */
-	private void drawBaseMapPending(GuiSink sink) {
-		String problem = XaeroMapTiles.status();
-		if (problem != null) {
-			drawBaseMapHint(sink, problem);
-			return;
-		}
-		sink.text(font, s("底图准备中", "preparing base map"),
-				width / 2f, height / 2f - 6, 0xFFFFC080, true);
-		sink.text(font, s("Xaero 还没有这片区域的地图数据", "Xaero has no map data for this area yet"),
-				width / 2f, height / 2f + 8, 0xFF9BA0B0, true);
+	/** 纯色底：没有底图，线网直接画在上面 */
+	private void drawBackground(GuiSink sink) {
+		sink.fill(0, 0, width, height, dark ? 0xFF14141C : 0xFFF2F2F6);
 	}
 	// ===== 线网 =====
 
@@ -403,7 +331,7 @@ public class MapScreen extends Screen {
 	}
 
 	private void drawStations(GuiSink sink, MapModel model, int mouseX, int mouseY) {
-		double radius = routeMode ? Math.max(6, 8 * Math.sqrt(scale)) : Math.max(4, 6 * Math.sqrt(scale));
+		double radius = stationRadius();
 		for (MapModel.Station station : model.stations) {
 			if (station.isInterchange() && station.hasBounds()) {
 				double[] capsule = capsule(station, radius * 2);
@@ -1296,6 +1224,11 @@ public class MapScreen extends Screen {
 
 	// ===== 选站 / 搜索 =====
 
+	/** 站点的绘制半径（路径查询模式下画大一点，好点） */
+	private double stationRadius() {
+		return routeMode ? Math.max(6, 8 * Math.sqrt(scale)) : Math.max(4, 6 * Math.sqrt(scale));
+	}
+
 	private MapModel.Station pickStation(MapModel model, double mouseX, double mouseY, double radius) {
 		double pick = Math.max(8, radius + 3);
 		MapModel.Station best = null;
@@ -1638,16 +1571,12 @@ public class MapScreen extends Screen {
 				return true;
 			}
 
-			// 点地图：选站
-			MapModel model = MapDataClient.model();
-			double radius = Math.max(6, 8 * Math.sqrt(scale));
-			MapModel.Station station = pickStation(model, mouseX, mouseY, radius);
-			if (station != null) {
-				handleStationPick(station);
-				return true;
-			}
-			dragging = true;
-			dragMoved = false;
+			// 按在地图上：先只记下按下位置，等松开时再决定这是「点站」还是「拖地图」。
+			// 不能在按下时就平移，否则选站时手一抖，地图就跟着指针走、刚才点的站会一直粘在指针下面。
+			pressed = true;
+			dragging = false;
+			pressX = mouseX;
+			pressY = mouseY;
 			dragLastX = mouseX;
 			dragLastY = mouseY;
 			return true;
@@ -1662,6 +1591,14 @@ public class MapScreen extends Screen {
 
 	@Override
 	public boolean mouseReleased(double mouseX, double mouseY, int button) {
+		if (pressed && !dragging && button == 0) {
+			// 按下后没有拖动过 → 当成点击：选站
+			MapModel.Station station = pickStation(MapDataClient.model(), mouseX, mouseY, stationRadius());
+			if (station != null) {
+				handleStationPick(station);
+			}
+		}
+		pressed = false;
 		dragging = false;
 		qualityDragging = false;
 		return super.mouseReleased(mouseX, mouseY, button);
@@ -1675,12 +1612,16 @@ public class MapScreen extends Screen {
 			updateQuality(mouseX, x + 54, 122);
 			return true;
 		}
-		if (dragging) {
+		if (pressed) {
+			// 指针还没走够距离就仍算「点击」，此时绝不平移
+			if (!dragging && Math.hypot(mouseX - pressX, mouseY - pressY) < DRAG_THRESHOLD) {
+				return true;
+			}
+			dragging = true;
 			centerX -= (mouseX - dragLastX) / scale;
 			centerZ -= (mouseY - dragLastY) / scale;
 			dragLastX = mouseX;
 			dragLastY = mouseY;
-			dragMoved = true;
 			return true;
 		}
 		return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);

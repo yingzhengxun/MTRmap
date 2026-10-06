@@ -17,7 +17,6 @@ import java.awt.geom.GeneralPath;
 import java.awt.geom.Line2D;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -31,8 +30,7 @@ import java.util.Locale;
  * 把地图 / 纪念票根渲染成图片并落盘。
  *
  * <p>游戏内的界面是用 Minecraft 的 GUI 管线画的，没法直接抓成图片，所以这里用
- * Java2D 重新画一遍：公式、配色、图层顺序全部照搬网页 map.js 的 render()，
- * 底图瓦片则用客户端用 Xaero 地图数据合成、并已上传到服务端的那批 PNG。产物存到
+ * Java2D 重新画一遍：公式、配色、图层顺序全部照搬网页 map.js 的 render()。产物存到
  * {@code <游戏目录>/mtrmap/} 下，文件名与网页的下载名一致。
  *
  * <p>只支持 PNG 与 JPG：WebP 需要额外的编解码库，游戏里不引入。
@@ -43,8 +41,6 @@ public final class MapExporter {
 	private static final int MAX_DIM = 4096;
 	/** 留白（像素，与网页一致） */
 	private static final int PADDING = 200;
-	/** 一次导出最多下载多少张瓦片，超过就只画纯色底 */
-	private static final int MAX_TILES = 400;
 
 	private MapExporter() {
 	}
@@ -131,7 +127,6 @@ public final class MapExporter {
 		try {
 			g.setColor(dark ? new Color(0xFF0F0F16, true) : new Color(0xFFE8E8EE, true));
 			g.fillRect(0, 0, expW, expH);
-			drawTiles(g, expW, expH, scale, offX, offY);
 
 			Transform tf = new Transform(scale, offX, offY);
 			drawDepots(g, model, tf, dark, scale);
@@ -203,46 +198,6 @@ public final class MapExporter {
 			any = true;
 		}
 		return any ? new double[]{minX, minZ, maxX, maxZ} : null;
-	}
-
-	private static void drawTiles(Graphics2D g, int expW, int expH, double scale, double offX, double offY) {
-		// 导出在后台线程跑，等得起：确保拿到确定的世界地图参数
-		WorldMapBridge.Settings wm = WorldMapBridge.await(3000L);
-		if (!wm.ok() || scale <= 0) {
-			return;
-		}
-		int tileZoom = (int) Math.floor(wm.maxZoom + Math.log(scale) / Math.log(2));
-		tileZoom = Math.max(wm.minZoom, Math.min(wm.maxZoom, tileZoom));
-		double tileScale = Math.pow(2, tileZoom - wm.maxZoom);
-		double tileScreen = wm.tileSize * scale / tileScale;
-		long blocksPerTile = Math.round(wm.tileSize / tileScale);
-		int tx0 = (int) Math.floor((0 - offX) / scale / blocksPerTile);
-		int tx1 = (int) Math.floor((expW - offX) / scale / blocksPerTile);
-		int ty0 = (int) Math.floor((0 - offY) / scale / blocksPerTile);
-		int ty1 = (int) Math.floor((expH - offY) / scale / blocksPerTile);
-		long count = (long) (tx1 - tx0 + 1) * (ty1 - ty0 + 1);
-		if (count > MAX_TILES) {
-			return;
-		}
-		for (int ty = ty0; ty <= ty1; ty++) {
-			for (int tx = tx0; tx <= tx1; tx++) {
-				byte[] bytes = MapDataClient.getBytes(WorldMapBridge.tilePath(tileZoom, tx, ty));
-				if (bytes == null || bytes.length == 0) {
-					continue;
-				}
-				try {
-					BufferedImage tile = ImageIO.read(new ByteArrayInputStream(bytes));
-					if (tile == null) {
-						continue;
-					}
-					int x = (int) Math.round(tx * (double) blocksPerTile * scale + offX);
-					int y = (int) Math.round(ty * (double) blocksPerTile * scale + offY);
-					g.drawImage(tile, x, y, (int) Math.ceil(tileScreen) + 1, (int) Math.ceil(tileScreen) + 1, null);
-				} catch (Throwable ignored) {
-					// 单张瓦片坏掉不影响整张图
-				}
-			}
-		}
 	}
 
 	private static void drawDepots(Graphics2D g, MapModel model, Transform tf, boolean dark, double scale) {
