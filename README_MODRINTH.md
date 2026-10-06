@@ -1,0 +1,206 @@
+# MTR Map
+
+[English](#english) | 中文
+
+在 Minecraft 里查看 **Minecraft Transit Railway（MTR）** 的线路图：既可以在浏览器打开 `http://localhost:1145` 看网页地图，也可以在游戏内按 **F6** 打开地图窗口。包含车站、线路、换乘站、车厂、列车与玩家位置，支持路径查询、导航下发、行程记录与图片导出。
+
+> 这份说明是写给玩家的。开发者请看 [GitHub 仓库](https://github.com/yingzhengxun/MTRmap) 里的 `README.md`。
+
+## 功能亮点
+
+### 网页地图（浏览器）
+
+- **线路图**：画布绘制线路、车站、换乘站、车厂与列车；换乘站用跑道形（胶囊）标记，范围覆盖该站所有线路的站台。
+- **搜索与详情**：随时搜索车站或线路，点开看详情侧边栏（坐标、经过线路、站数、全程时间、班次间隔）。
+- **路径查询**：纯前端计算的多种方案，标注换乘次数、总距离、预计时间与乘车方向（`开往 <终点站>`）。
+- **我的位置**：每 2 秒刷新，位置变化自动重绘地图、更新出发点并重新查询路线；退出游戏后自动隐藏玩家卡片。
+- **行程记录**：按玩家存档，可删除单条记录，一键生成**纪念票根**（PNG 下载）。
+- **导航下发**：选好方案后把乘车步骤推送到游戏内，HUD 面板会显示当前行程进度。
+- 夜间模式、中英文切换、导出图片（PNG / JPG / WebP，可选质量）、地图字体选择、缩放与重置视图、工具栏折叠。
+
+### 游戏内
+
+- **地图窗口（F6）**：以 squaremap 渲染的地图瓦片为底图，叠加 MTR 线网、车站、换乘站、车厂、列车与玩家；拖拽平移、滚轮缩放；左侧搜索与线路一览，右侧工具栏（路径查询 / 夜间模式 / 中英文 / 导出图片 / 车厂开关 / 缩放 / 重置 / 我的位置 / 行程记录）。
+- **铁路仪表板按钮**：在 MTR 的铁路仪表板上注入「交通线路图」按钮，点一下用系统浏览器打开网页地图。
+- **导出图片**：整张线网导出成 PNG / JPG（最长边 4096）；纪念票根在行程记录里一键保存为 PNG（只保存，不做打印）。文件保存在 `<游戏目录>/mtrmap/`。
+- **导航 HUD**：显示当前行程进度；无界面时按 `Ctrl+X` 退出导航；完成或退出导航时上传行程记录。
+
+## 支持的版本
+
+| Minecraft | 加载器 | 下载哪个 jar |
+| --- | --- | --- |
+| 1.20.1 | Fabric / Forge | `mtrmap-<版本>-1.20.1-universal.jar` |
+| 1.21.1 | Fabric / NeoForge | `mtrmap-<版本>-1.21.1-universal.jar` |
+
+每个 MC 版本只发布一个 `universal` jar，同一个文件在对应的两个加载器下都能直接使用，不用区分。
+
+## 安装
+
+1. 装好对应版本的 Minecraft 与加载器。
+2. 装 **MTR（Minecraft Transit Railway）**：3.x 与 4.x 都可以（依赖范围是通配符，不挑版本）。
+3. Fabric 用户还要装 **Fabric API**；Forge / NeoForge 不需要。
+4. 装 **squaremap**：游戏内地图窗口用它渲染的地图当底图，是本模组的**硬前置**，没装的话本模组不会加载。
+5. 把 `mtrmap-<版本>-<MC 版本>-universal.jar` 放进 `mods/` 文件夹。
+
+## 快速上手
+
+1. 进入一个存档 / 服务器（**本机**开服或单机，见下面「常见问题」）。
+2. 浏览器打开 `http://localhost:1145`（端口被占用时以聊天栏提示的实际端口为准）。
+3. 游戏内按 **F6** 打开地图窗口；按 `Ctrl+X`（在没有打开任何界面时）退出导航。
+
+## 配置
+
+配置文件在 `mods/mapconfig/mtrmap.json`，不存在会自动创建：
+
+```json
+{
+  "showDepots": true,
+  "port": 1145
+}
+```
+
+| 字段 | 说明 |
+| --- | --- |
+| `showDepots` | 是否显示车厂 |
+| `port` | 网页地图端口，默认 `1145`。被占用时会自动往后顺延到第一个可用端口，并在你进游戏时用消息提示实际端口 |
+
+游戏内地图窗口的底图端口取自 squaremap 自己的配置（`settings.internal-webserver.port`，默认 `8080`）。模组会按「squaremap 配置里的端口 → `config/squaremap/config.yml` → 8080 → squaremap 公布的 Web 地址」逐个试连，第一个连通的才用来取瓦片；连不上时会在窗口中央写明原因，日志里也会打出 `游戏内地图：squaremap 底图不可用（...）`。
+
+行程记录保存在 `mods/mapconfig/mtrmap_trips.json`。
+
+### 命令
+
+```
+/mtrmap showdepots <true|false>
+```
+
+## 常见问题
+
+**Q：浏览器打不开 `localhost:1145`？**
+A：看游戏启动时聊天栏的提示——端口被占用时模组会自动顺延，提示里会给出实际端口，用那个端口访问。局域网里想让别人也能访问，需要放行该端口的入站连接。
+
+**Q：F6 窗口里底图是一片纯色，只有线网？**
+A：说明客户端连不上 squaremap 的底图服务。窗口中央会写明具体原因，常见的有三种：
+1. squaremap 没装（它必须是硬前置，缺失时模组本身也加载不了）；
+2. squaremap 的内置 Web 服务器被关掉了（`settings.internal-webserver.enabled` 改成 `true` 后重进）；
+3. 你连的是**远程服务器**：底图服务在服务器那台机器上，本机 `localhost` 上没有，所以拿不到瓦片（用下面的「远程服务器」说明处理）。
+
+**Q：连远程服务器能用吗？**
+A：本模组的地图服务与数据采集都跑在**服务端**，游戏内 F6 窗口也是从 `localhost:1145` 取数据的。所以在远程服务器上要用，需要把服务器的 **1145**（地图服务）与 squaremap 的 **8080**（底图瓦片）都转发 / 开放到你本机，否则网页地图打不开、F6 窗口也只有线网没有底图。
+
+**Q：装完进游戏报错 / 模组列表里没有？**
+A：检查三件事：MC 版本与加载器是否和下载的 jar 对得上；MTR 是否已安装；Fabric 下 Fabric API 是否已安装。
+
+**Q：游戏卡顿吗？**
+A：网页地图和 F6 窗口都只做绘制与本地 HTTP 轮询，数据每 2 秒刷新一次；瓦片是后台线程下载并缓存的，不会占用主线程。
+
+## 反馈
+
+有问题或建议请到 [GitHub Issues](https://github.com/yingzhengxun/MTRmap/issues) 反馈，附上 MC 版本、加载器版本与 `latest.log` 会更方便定位。
+
+## 许可证
+
+Apache-2.0
+
+---
+
+<a id="english"></a>
+
+## English
+
+View your **Minecraft Transit Railway (MTR)** network from anywhere: open `http://localhost:1145` in a browser for the web map, or press **F6** in game for the map window. Stations, lines, interchanges, depots, trains and player positions are all shown, with a route planner, in-game navigation dispatch, trip history and image export.
+
+> This document is for players. Developers should read `README.md` in the [GitHub repository](https://github.com/yingzhengxun/MTRmap).
+
+### Highlights
+
+#### Web map (browser)
+
+- **Network map**: canvas rendering of lines, stations, interchanges, depots and trains. Interchange stations use a stadium/capsule marker covering the platforms of every line serving them.
+- **Search & details**: search stations or lines at any time and open a detail sidebar (coordinates, lines served, stop count, full-trip time, headway).
+- **Route planner**: several client-side options with transfer counts, total distance, estimated time and ride direction (`towards <terminus>`).
+- **My Location**: refreshed every 2 seconds; position changes redraw the map, update the origin and re-run the route query. The player card hides itself once you leave the game.
+- **Trip history**: archived per player, individually deletable, with a one-click **souvenir ticket** (PNG download).
+- **Navigation dispatch**: push the chosen itinerary into the game; the HUD panel shows current progress.
+- Dark mode, Chinese/English toggle, image export (PNG / JPG / WebP with selectable quality), map font selector, zoom and view reset, collapsible toolbar.
+
+#### In game
+
+- **Map window (F6)**: squaremap-rendered tiles as the base map with the MTR network, stations, interchanges, depots, trains and players overlaid. Drag to pan, scroll to zoom; search and line list on the left, toolbar on the right (route planner / night mode / language / export / depots / zoom / reset / my location / trip records).
+- **Railway dashboard button**: injects a "Traffic Map" button that opens the web map in your system browser.
+- **Export**: the whole network as PNG / JPG (max edge 4096); a souvenir ticket can be saved as PNG from the trip records (save only, no printing). Files land in `<gameDir>/mtrmap/`.
+- **Navigation HUD**: shows current trip progress; press `Ctrl+X` (with no screen open) to exit navigation; the trip is uploaded on completion or exit.
+
+### Supported versions
+
+| Minecraft | Loaders | Which jar to download |
+| --- | --- | --- |
+| 1.20.1 | Fabric / Forge | `mtrmap-<version>-1.20.1-universal.jar` |
+| 1.21.1 | Fabric / NeoForge | `mtrmap-<version>-1.21.1-universal.jar` |
+
+Each Minecraft version ships a single `universal` jar that works on both of its loaders — no per-loader build to pick.
+
+### Installation
+
+1. Install the matching Minecraft version and loader.
+2. Install **MTR (Minecraft Transit Railway)**. Both 3.x and 4.x work — the dependency range is a wildcard.
+3. On Fabric you also need **Fabric API**; Forge / NeoForge do not.
+4. Install **squaremap**: the in-game map window uses its rendered tiles as the base map. It is a **hard dependency** and this mod will not load without it.
+5. Drop `mtrmap-<version>-<MC version>-universal.jar` into your `mods/` folder.
+
+### Quick start
+
+1. Load a world or server (must be **local** — see the FAQ below).
+2. Open `http://localhost:1145` in your browser (if the port was taken, use the one announced in chat).
+3. Press **F6** in game for the map window; press `Ctrl+X` (with no screen open) to exit navigation.
+
+### Configuration
+
+The config file lives at `mods/mapconfig/mtrmap.json` and is created automatically if missing:
+
+```json
+{
+  "showDepots": true,
+  "port": 1145
+}
+```
+
+| Field | Description |
+| --- | --- |
+| `showDepots` | Whether to display depots |
+| `port` | Web map port, defaults to `1145`. If it is taken, the mod shifts to the next free port and notifies you in chat with the actual port |
+
+The in-game map window reads its tile port from squaremap's own config (`settings.internal-webserver.port`, default `8080`). The mod probes a list of candidates — squaremap's configured port, `config/squaremap/config.yml`, 8080, then squaremap's advertised web address — and uses the first that answers; if none does, the reason is printed in the middle of the window and logged as `游戏内地图：squaremap 底图不可用（...）`.
+
+Trip records are stored in `mods/mapconfig/mtrmap_trips.json`.
+
+#### Command
+
+```
+/mtrmap showdepots <true|false>
+```
+
+### FAQ
+
+**Q: The browser can't open `localhost:1145`.**
+A: Check the chat notice on world load — if the port was taken, the mod shifts to the next free port and tells you which one. To let others on your LAN in, allow inbound connections on that port.
+
+**Q: The F6 window shows only the network on a flat colour, no base map.**
+A: The client cannot reach squaremap's tile server. The window prints the exact reason; the usual causes are (1) squaremap is missing, (2) squaremap's built-in web server is disabled (set `settings.internal-webserver.enabled` to `true` and re-enter), or (3) you are on a **remote server**, where the tile server runs on the server machine and is not on your local `localhost`.
+
+**Q: Does it work on a remote server?**
+A: The map service and data collection run **server-side**, and the F6 window also reads its data from `localhost:1145`. To use it on a remote server, forward / expose both the server's **1145** (map service) and squaremap's **8080** (tiles) to your machine — otherwise the web map won't open and the F6 window will show the network without a base map.
+
+**Q: The mod doesn't show up / the game errors on startup.**
+A: Check three things: your MC version and loader match the jar you downloaded, MTR is installed, and on Fabric that Fabric API is installed.
+
+**Q: Does it hurt performance?**
+A: The web map and the F6 window only draw and poll a local HTTP endpoint every 2 seconds; tiles are downloaded and cached on background threads, never on the main thread.
+
+### Feedback
+
+Questions and suggestions are welcome in [GitHub Issues](https://github.com/yingzhengxun/MTRmap/issues). Including your MC version, loader version and `latest.log` makes it much easier to pin down.
+
+### License
+
+Apache-2.0
