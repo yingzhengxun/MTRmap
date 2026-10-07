@@ -58,4 +58,14 @@ public class NeoForgePlatformImpl implements MtrMapPlatform {
     public void sendMapPort(net.minecraft.server.level.ServerPlayer player, int port) {
         NeoForgeNetwork.sendMapPort(player, port);
     }
+
+    @Override
+    public void sendMapRequest(int requestId, String path, String body) {
+        NeoForgeNetwork.sendMapRequest(requestId, path, body);
+    }
+
+    @Override
+    public void sendMapData(net.minecraft.server.level.ServerPlayer player, int requestId, int index, int total, byte[] chunk) {
+        NeoForgeNetwork.sendMapData(player, requestId, index, total, chunk);
+    }
 }

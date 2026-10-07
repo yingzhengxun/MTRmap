@@ -4,33 +4,27 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mtrmap.MtrMapCommon;
+import com.mtrmap.client.MapChannel;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import org.lwjgl.glfw.GLFW;
 
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
-
 /**
  * 游戏内导航控制器。
  *
- * 数据流：网页地图把路线 POST 到本机 HTTP 服务的 /api/nav（记在该玩家名下），
- * 客户端这里用一条后台线程每秒 GET 一次领取任务（服务端取走即删，天然一次性）。
+ * <p>数据流：网页地图把路线 POST 到地图服务的 /api/nav（记在该玩家名下），
+ * 客户端这里每秒向服务端领一次任务（服务端取走即删，天然一次性）。
+ * 领取与回传都走模组网络包（{@link MapChannel}），不依赖地图 HTTP 服务。
  * 领取到任务后就地保存在本地，之后不再依赖网络；到达判定、Ctrl+X 退出、
  * 完成/中途退出后回传行程记录，全部在本类里完成。
  *
- * 进度判定：任务是一串带坐标的步骤，玩家走到当前步骤的目标站附近
+ * <p>进度判定：任务是一串带坐标的步骤，玩家走到当前步骤的目标站附近
  * （水平距离小于 {@link #ARRIVE_RADIUS}）就推进到下一步，走完即完成。
  */
 public final class NavController {
 
     /** 轮询间隔：导航要跟手，1 秒一次 */
     private static final long POLL_INTERVAL_MS = 1000L;
-    /** 单次 HTTP 超时（毫秒），localhost 正常时几毫秒就返回 */
-    private static final int TIMEOUT_MS = 800;
     /** 到达当前步骤目标站的判定半径（方块） */
     private static final double ARRIVE_RADIUS = 16.0;
     /** 完成后「恭喜任务已完成」的展示时长（毫秒） */
@@ -126,30 +120,18 @@ public final class NavController {
         }
     }
 
-    private static JsonObject fetchTask(String uuid) throws Exception {
-        HttpURLConnection conn = (HttpURLConnection) new URL(
-                com.mtrmap.client.MapEndpoint.base() + "/api/nav?uuid=" + uuid).openConnection();
-        try {
-            conn.setConnectTimeout(TIMEOUT_MS);
-            conn.setReadTimeout(TIMEOUT_MS);
-            conn.setRequestMethod("GET");
-            if (conn.getResponseCode() != 200) {
-                return null;
-            }
-            String body;
-            try (InputStream is = conn.getInputStream()) {
-                body = new String(MtrMapCommon.readAll(is), StandardCharsets.UTF_8);
-            }
-            JsonElement root = MtrMapCommon.parseJson(body);
-            if (!root.isJsonObject()) {
-                return null;
-            }
-            JsonObject obj = root.getAsJsonObject();
-            // 服务端没有任务时返回空对象 {}
-            return obj.size() == 0 ? null : obj;
-        } finally {
-            conn.disconnect();
+    private static JsonObject fetchTask(String uuid) {
+        String body = MapChannel.request("/api/nav?uuid=" + uuid, null);
+        if (body == null) {
+            return null;
         }
+        JsonElement root = MtrMapCommon.parseJson(body);
+        if (!root.isJsonObject()) {
+            return null;
+        }
+        JsonObject obj = root.getAsJsonObject();
+        // 服务端没有任务时返回空对象 {}
+        return obj.size() == 0 ? null : obj;
     }
 
     // ===== 每 tick =====
@@ -258,25 +240,8 @@ public final class NavController {
     }
 
     private static void postJson(String uuid, String json) {
-        try {
-            HttpURLConnection conn = (HttpURLConnection) new URL(
-                    com.mtrmap.client.MapEndpoint.base() + "/api/trips").openConnection();
-            try {
-                conn.setConnectTimeout(TIMEOUT_MS);
-                conn.setReadTimeout(TIMEOUT_MS);
-                conn.setRequestMethod("POST");
-                conn.setDoOutput(true);
-                conn.setRequestProperty("Content-Type", "application/json");
-                try (OutputStream os = conn.getOutputStream()) {
-                    os.write(json.getBytes(StandardCharsets.UTF_8));
-                }
-                conn.getResponseCode();
-            } finally {
-                conn.disconnect();
-            }
-        } catch (Throwable t) {
-            // 回传失败不影响游戏
-        }
+        // 回传失败不影响游戏
+        MapChannel.request("/api/trips", json);
     }
 
     // ===== 供 HUD / waypoint 读取 =====

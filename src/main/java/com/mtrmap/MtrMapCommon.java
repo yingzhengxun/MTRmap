@@ -5,6 +5,7 @@ import com.mtrmap.config.MtrMapConfig;
 import com.mtrmap.server.AvatarHandler;
 import com.mtrmap.server.MapDataCollector;
 import com.mtrmap.server.MapHttpServer;
+import com.mtrmap.server.MapRequestRouter;
 import com.mtrmap.server.NavTaskStore;
 import com.mtrmap.server.PlayerTracker;
 import com.mtrmap.server.RailPathFinder;
@@ -28,6 +29,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 /**
@@ -62,6 +64,30 @@ public final class MtrMapCommon {
     *///?} else {
     public static final ResourceLocation PORT_CHANNEL = new ResourceLocation("mtrmap", "port");
     //?}
+
+    /** 游戏内地图窗口向服务端取数所使用的网络通道（客户端 -> 服务端） */
+    //? if >=1.21.1 {
+    /*public static final ResourceLocation MAP_REQUEST_CHANNEL =
+            ResourceLocation.fromNamespaceAndPath("mtrmap", "map_request");
+    *///?} else {
+    public static final ResourceLocation MAP_REQUEST_CHANNEL = new ResourceLocation("mtrmap", "map_request");
+    //?}
+
+    /** 服务端分块回传地图数据所使用的网络通道（服务端 -> 客户端） */
+    //? if >=1.21.1 {
+    /*public static final ResourceLocation MAP_DATA_CHANNEL =
+            ResourceLocation.fromNamespaceAndPath("mtrmap", "map_data");
+    *///?} else {
+    public static final ResourceLocation MAP_DATA_CHANNEL = new ResourceLocation("mtrmap", "map_data");
+    //?}
+
+    /**
+     * 地图数据回包的分块大小（字节）。
+     *
+     * <p>线网大时整份 JSON 可达数百 KB，一次性塞进一个自定义包既会长时间占住网络线程，
+     * 也容易撞上各加载器的包体积限制，所以按这个大小切片后再逐块发送。
+     */
+    public static final int MAP_CHUNK_SIZE = 30000;
 
     private static MinecraftServer currentServer;
     /** 端口顺延：配置端口与最终实际端口（相等或不曾启动时为 -1 表示无需提示） */
@@ -275,6 +301,45 @@ public final class MtrMapCommon {
                 AvatarHandler.putAvatar(uuid.toString(), png);
             }
         });
+    }
+
+    /**
+     * 收到游戏内地图窗口的数据请求：在服务端线程上取数，并把结果分块发回。
+     *
+     * <p>和网页走的 HTTP 端点共用 {@link MapRequestRouter} 这一套取数逻辑，
+     * 区别只是回包走模组网络包，游戏内地图因此不再依赖 1145 端口。
+     *
+     * @param path 形如 {@code /api/data}，可带查询串（{@code /api/trips?uuid=...}）
+     * @param body POST 体（JSON 文本），GET 请求传空串
+     */
+    public static void onMapRequest(MinecraftServer server, net.minecraft.server.level.ServerPlayer player,
+                                    int requestId, String path, String body) {
+        if (server == null || player == null) {
+            return;
+        }
+        UUID sender = player.getUUID();
+        server.execute(() -> {
+            try {
+                String json = MapRequestRouter.handle(server, path, body, sender);
+                sendMapChunks(player, requestId, json);
+            } catch (Throwable t) {
+                // 玩家可能在取数期间断开：只记一行日志，不影响服务器
+                LOGGER.warn("处理地图数据请求失败：{}", path, t);
+            }
+        });
+    }
+
+    /** 把一份 JSON 文本切成若干块发给客户端（按 requestId 归属，客户端负责拼回）。 */
+    private static void sendMapChunks(net.minecraft.server.level.ServerPlayer player, int requestId, String json) {
+        byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
+        int total = Math.max(1, (bytes.length + MAP_CHUNK_SIZE - 1) / MAP_CHUNK_SIZE);
+        for (int index = 0; index < total; index++) {
+            int offset = index * MAP_CHUNK_SIZE;
+            int length = Math.min(MAP_CHUNK_SIZE, bytes.length - offset);
+            byte[] chunk = new byte[length];
+            System.arraycopy(bytes, offset, chunk, 0, length);
+            com.mtrmap.platform.Platform.get().sendMapData(player, requestId, index, total, chunk);
+        }
     }
 
     public static MinecraftServer getCurrentServer() {

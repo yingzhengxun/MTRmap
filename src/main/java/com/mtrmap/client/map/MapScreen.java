@@ -273,8 +273,9 @@ public class MapScreen extends Screen {
 	/**
 	 * 地图画不出来时，在画面中央标出原因。
 	 *
-	 * <p>「窗口打开了但里面空的」最容易被误判成窗口没开，这里直接把「连的是哪个地址、
-	 * 为什么画不出来」写在屏幕上，一眼就能分出是地址/端口不对、还是服务端没数据。
+	 * <p>数据是直接从服务端取的（走模组网络包），所以「窗口打开了但里面空的」
+	 * 只会是「还没收到服务端数据」或「服务端 MTR 线网没加载出来」两种情况，
+	 * 这里直接把区分写在屏幕上。
 	 */
 	private void drawConnectionHint(GuiSink sink, MapModel model) {
 		float cx = width / 2f;
@@ -283,20 +284,16 @@ public class MapScreen extends Screen {
 			if (!model.stations.isEmpty()) {
 				return;
 			}
-			sink.text(font, "已连上地图服务，但服务端没有车站数据", cx, y, 0xFFFF8080, true);
+			sink.text(font, "已取到服务端数据，但服务端没有车站数据", cx, y, 0xFFFF8080, true);
 			y += 12;
 			sink.text(font, "（服务端 MTR 线网数据可能没加载成功）", cx, y, dimColor(), true);
 			return;
 		}
 		String error = MapDataClient.lastError();
 		if (error == null) {
-			sink.text(font, "正在连接地图服务…", cx, y, dimColor(), true);
+			sink.text(font, "正在从服务端获取地图数据…", cx, y, dimColor(), true);
 		} else {
-			sink.text(font, "无法连接地图服务", cx, y, 0xFFFF8080, true);
-		}
-		y += 12;
-		sink.text(font, MapDataClient.baseUrl(), cx, y, textColor(), true);
-		if (error != null) {
+			sink.text(font, "无法从服务端获取地图数据", cx, y, 0xFFFF8080, true);
 			y += 12;
 			sink.text(font, error, cx, y, dimColor(), true);
 		}

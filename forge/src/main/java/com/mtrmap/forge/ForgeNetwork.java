@@ -1,6 +1,7 @@
 package com.mtrmap.forge;
 
 import com.mtrmap.MtrMapCommon;
+import com.mtrmap.client.MtrMapClientCommon;
 // Forge 的网络包路径分三代：
 //   1.18.2+  net.minecraftforge.network
 //   1.17.1   net.minecraftforge.fmllegacy.network（1.19 之前的过渡包）
@@ -89,6 +90,42 @@ public final class ForgeNetwork {
                 })
                 *///?}
                 .add();
+
+        // 游戏内地图取数请求：服务端按 path 取数后分块回给该玩家
+        CHANNEL.messageBuilder(MapRequestMessage.class, 2, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(MapRequestMessage::encode)
+                .decoder(MapRequestMessage::decode)
+                //? if >=1.19 {
+                .consumerMainThread((msg, ctx) -> {
+                    MtrMapCommon.onMapRequest(MtrMapCommon.getCurrentServer(), ctx.get().getSender(),
+                            msg.requestId(), msg.path(), msg.body());
+                    ctx.get().setPacketHandled(true);
+                })
+                //?} else {
+                /*.consumer((msg, ctx) -> {
+                    MtrMapCommon.onMapRequest(MtrMapCommon.getCurrentServer(), ctx.get().getSender(),
+                            msg.requestId(), msg.path(), msg.body());
+                    ctx.get().setPacketHandled(true);
+                })
+                *///?}
+                .add();
+
+        // 地图数据分块回包（PLAY_TO_CLIENT）
+        CHANNEL.messageBuilder(MapDataMessage.class, 3, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(MapDataMessage::encode)
+                .decoder(MapDataMessage::decode)
+                //? if >=1.19 {
+                .consumerMainThread((msg, ctx) -> {
+                    MtrMapClientCommon.onMapDataReceived(msg.requestId(), msg.index(), msg.total(), msg.chunk());
+                    ctx.get().setPacketHandled(true);
+                })
+                //?} else {
+                /*.consumer((msg, ctx) -> {
+                    MtrMapClientCommon.onMapDataReceived(msg.requestId(), msg.index(), msg.total(), msg.chunk());
+                    ctx.get().setPacketHandled(true);
+                })
+                *///?}
+                .add();
     }
 
     /** 客户端把头像推给服务端。 */
@@ -99,5 +136,15 @@ public final class ForgeNetwork {
     /** 服务端把地图 HTTP 端口告诉某个玩家。 */
     public static void sendMapPort(ServerPlayer player, int port) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new MapPortMessage(port));
+    }
+
+    /** 客户端向服务端要地图数据。 */
+    public static void sendMapRequest(int requestId, String path, String body) {
+        CHANNEL.sendToServer(new MapRequestMessage(requestId, path, body));
+    }
+
+    /** 服务端把地图数据的一个分块发给某个玩家。 */
+    public static void sendMapData(ServerPlayer player, int requestId, int index, int total, byte[] chunk) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new MapDataMessage(requestId, index, total, chunk));
     }
 }

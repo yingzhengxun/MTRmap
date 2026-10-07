@@ -34,4 +34,21 @@ public interface MtrMapPlatform {
      * 只能由服务端把实际监听的端口发过来，客户端才能拼出可访问的地图服务地址。
      */
     void sendMapPort(net.minecraft.server.level.ServerPlayer player, int port);
+
+    /**
+     * 游戏内地图窗口向服务端取数（客户端 -> 服务端）。
+     *
+     * @param requestId 请求编号，服务端回包时原样带回，客户端据此配对
+     * @param path      形如 {@code /api/data}，可带查询串
+     * @param body      POST 体（JSON 文本），GET 请求传空串
+     */
+    void sendMapRequest(int requestId, String path, String body);
+
+    /**
+     * 服务端把地图数据的一个分块发给某玩家（服务端 -> 客户端）。
+     *
+     * @param index 分块序号（从 0 开始）
+     * @param total 分块总数
+     */
+    void sendMapData(net.minecraft.server.level.ServerPlayer player, int requestId, int index, int total, byte[] chunk);
 }

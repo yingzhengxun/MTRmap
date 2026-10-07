@@ -58,4 +58,14 @@ public class ForgePlatformImpl implements MtrMapPlatform {
     public void sendMapPort(net.minecraft.server.level.ServerPlayer player, int port) {
         ForgeNetwork.sendMapPort(player, port);
     }
+
+    @Override
+    public void sendMapRequest(int requestId, String path, String body) {
+        ForgeNetwork.sendMapRequest(requestId, path, body);
+    }
+
+    @Override
+    public void sendMapData(net.minecraft.server.level.ServerPlayer player, int requestId, int index, int total, byte[] chunk) {
+        ForgeNetwork.sendMapData(player, requestId, index, total, chunk);
+    }
 }

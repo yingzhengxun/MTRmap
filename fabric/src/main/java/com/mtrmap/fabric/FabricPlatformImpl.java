@@ -18,6 +18,9 @@ import java.util.UUID;
  */
 public class FabricPlatformImpl implements MtrMapPlatform {
 
+    /** 请求里字符串（path / POST 体）的长度上限，与接收端一致 */
+    private static final int MAX_TEXT = 1 << 20;
+
     @Override
     public String loaderName() {
         return "fabric";
@@ -53,6 +56,33 @@ public class FabricPlatformImpl implements MtrMapPlatform {
         FriendlyByteBuf buf = PacketByteBufs.create();
         buf.writeInt(port);
         ServerPlayNetworking.send(player, MtrMapCommon.PORT_CHANNEL, buf);
+        //?}
+    }
+
+    @Override
+    public void sendMapRequest(int requestId, String path, String body) {
+        //? if >=1.21.1 {
+        /*ClientPlayNetworking.send(new MapRequestPayload(requestId, path, body));
+        *///?} else {
+        FriendlyByteBuf buf = PacketByteBufs.create();
+        buf.writeVarInt(requestId);
+        buf.writeUtf(path, MAX_TEXT);
+        buf.writeUtf(body, MAX_TEXT);
+        ClientPlayNetworking.send(MtrMapCommon.MAP_REQUEST_CHANNEL, buf);
+        //?}
+    }
+
+    @Override
+    public void sendMapData(ServerPlayer player, int requestId, int index, int total, byte[] chunk) {
+        //? if >=1.21.1 {
+        /*ServerPlayNetworking.send(player, new MapDataPayload(requestId, index, total, chunk));
+        *///?} else {
+        FriendlyByteBuf buf = PacketByteBufs.create();
+        buf.writeVarInt(requestId);
+        buf.writeVarInt(index);
+        buf.writeVarInt(total);
+        buf.writeByteArray(chunk);
+        ServerPlayNetworking.send(player, MtrMapCommon.MAP_DATA_CHANNEL, buf);
         //?}
     }
 }

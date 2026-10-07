@@ -13,7 +13,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
-import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
@@ -93,30 +92,11 @@ public class MapHttpServer {
 		server.createContext("/style.css", new StaticFileHandler("/assets/mtrmap/web/style.css", "css"));
 		server.createContext("/map.js", new StaticFileHandler("/assets/mtrmap/web/map.js", "js"));
 
-		// API 端点
-		server.createContext("/api/data", exchange -> {
-			try {
-				JsonObject data = MapDataCollector.collect(minecraftServer);
-				sendJson(exchange, GSON.toJson(data));
-			} catch (Throwable t) {
-				MtrMapCommon.LOGGER.error("处理 /api/data 请求时发生异常", t);
-				JsonObject err = new JsonObject();
-				err.addProperty("error", true);
-				err.addProperty("message", t.getClass().getName() + ": " + t.getMessage());
-				sendJson(exchange, GSON.toJson(err));
-			}
-		});
-		server.createContext("/api/players", exchange -> {
-			try {
-				sendJson(exchange, GSON.toJson(PlayerTracker.toJson()));
-			} catch (Throwable t) {
-				MtrMapCommon.LOGGER.error("处理 /api/players 请求时发生异常", t);
-				JsonObject err = new JsonObject();
-				err.addProperty("error", true);
-				err.addProperty("message", t.getClass().getName() + ": " + t.getMessage());
-				sendJson(exchange, GSON.toJson(err));
-			}
-		});
+		// API 端点：取数逻辑与游戏内地图窗口的网络包共用 MapRequestRouter
+		server.createContext("/api/data", exchange ->
+				sendJson(exchange, MapRequestRouter.handle(minecraftServer, "/api/data", null, null)));
+		server.createContext("/api/players", exchange ->
+				sendJson(exchange, MapRequestRouter.handle(minecraftServer, "/api/players", null, null)));
 
 		// 线网几何端点：供游戏内地图窗口使用（不含列车，体积更小、开销更低）
 		server.createContext("/api/overlay", exchange -> {
@@ -155,64 +135,19 @@ public class MapHttpServer {
 		});
 
 		// 导航任务：网页 POST 下发（{uuid, task}），游戏客户端 GET 轮询领取（?uuid=）
-		server.createContext("/api/nav", exchange -> {
-			try {
-				if ("POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-					JsonObject body = readJsonBody(exchange);
-					String uuid = body != null && body.has("uuid") ? body.get("uuid").getAsString() : null;
-					JsonObject task = body != null && body.has("task") && body.get("task").isJsonObject()
-							? body.getAsJsonObject("task") : null;
-					NavTaskStore.put(uuid, task);
-					JsonObject out = new JsonObject();
-					out.addProperty("ok", true);
-					sendJson(exchange, GSON.toJson(out));
-				} else {
-					String uuid = queryParam(exchange, "uuid");
-					JsonObject task = NavTaskStore.take(uuid);
-					sendJson(exchange, task == null ? "{}" : GSON.toJson(task));
-				}
-			} catch (Throwable t) {
-				MtrMapCommon.LOGGER.error("处理 /api/nav 请求时发生异常", t);
-				sendError(exchange, t);
-			}
-		});
+		server.createContext("/api/nav", exchange ->
+				sendJson(exchange, MapRequestRouter.handle(minecraftServer,
+						pathWithQuery(exchange, "/api/nav"), readBody(exchange), null)));
 
 		// 行程记录：GET 查询（?uuid=）、POST 新增
-		server.createContext("/api/trips", exchange -> {
-			try {
-				if ("POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-					JsonObject body = readJsonBody(exchange);
-					JsonObject saved = TripStore.add(body);
-					JsonObject out = new JsonObject();
-					out.addProperty("ok", saved != null);
-					if (saved != null) {
-						out.add("trip", saved);
-					}
-					sendJson(exchange, GSON.toJson(out));
-				} else {
-					String uuid = queryParam(exchange, "uuid");
-					sendJson(exchange, GSON.toJson(TripStore.list(uuid)));
-				}
-			} catch (Throwable t) {
-				MtrMapCommon.LOGGER.error("处理 /api/trips 请求时发生异常", t);
-				sendError(exchange, t);
-			}
-		});
+		server.createContext("/api/trips", exchange ->
+				sendJson(exchange, MapRequestRouter.handle(minecraftServer,
+						pathWithQuery(exchange, "/api/trips"), readBody(exchange), null)));
 
 		// 删除行程：POST {uuid, id}
-		server.createContext("/api/trips/delete", exchange -> {
-			try {
-				JsonObject body = readJsonBody(exchange);
-				String uuid = body != null && body.has("uuid") ? body.get("uuid").getAsString() : null;
-				String id = body != null && body.has("id") ? body.get("id").getAsString() : null;
-				JsonObject out = new JsonObject();
-				out.addProperty("ok", TripStore.delete(uuid, id));
-				sendJson(exchange, GSON.toJson(out));
-			} catch (Throwable t) {
-				MtrMapCommon.LOGGER.error("处理 /api/trips/delete 请求时发生异常", t);
-				sendError(exchange, t);
-			}
-		});
+		server.createContext("/api/trips/delete", exchange ->
+				sendJson(exchange, MapRequestRouter.handle(minecraftServer,
+						"/api/trips/delete", readBody(exchange), null)));
 
 		// 调试端点：线路寻路诊断（排查线位问题时使用）
 		server.createContext("/api/debug", exchange -> {
@@ -293,40 +228,20 @@ public class MapHttpServer {
 		return player;
 	}
 
-	/** 读取请求体并解析为 JSON 对象；为空或非法时返回 null */
-	private static JsonObject readJsonBody(HttpExchange exchange) {
+	/** 读取请求体为字符串（原样交给 MapRequestRouter 解析）；为空时返回 null */
+	private static String readBody(HttpExchange exchange) {
 		try (InputStream is = exchange.getRequestBody()) {
 			String body = new String(MtrMapCommon.readAll(is), StandardCharsets.UTF_8);
-			if (body.isEmpty()) {
-				return null;
-			}
-			return MtrMapCommon.parseJson(body).getAsJsonObject();
+			return body.isEmpty() ? null : body;
 		} catch (Exception e) {
 			return null;
 		}
 	}
 
-	/** 取 URL 查询参数（已做 URL 解码） */
-	private static String queryParam(HttpExchange exchange, String name) {
+	/** 把请求的查询串接回路径，让 MapRequestRouter 统一解析 */
+	private static String pathWithQuery(HttpExchange exchange, String path) {
 		String query = exchange.getRequestURI().getQuery();
-		if (query == null) {
-			return null;
-		}
-		for (String pair : query.split("&")) {
-			int eq = pair.indexOf('=');
-			if (eq <= 0) {
-				continue;
-			}
-			if (name.equals(pair.substring(0, eq))) {
-				try {
-					// URLDecoder.decode(String, Charset) 是 Java 10 才加的，1.16.5 只能用名字
-					return URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8.name());
-				} catch (Exception e) {
-					return pair.substring(eq + 1);
-				}
-			}
-		}
-		return null;
+		return query == null || query.isEmpty() ? path : path + "?" + query;
 	}
 
 	/**

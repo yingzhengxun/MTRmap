@@ -5,7 +5,10 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ServerData;
 
 /**
- * 地图 HTTP 服务的地址解析（只在客户端使用）。
+ * 地图网页的地址解析（只在客户端使用）。
+ *
+ * <p>只有「用系统浏览器打开地图网页」这一处需要它：游戏内的 F6 地图窗口与导航
+ * 已经改走模组网络包，不再访问这个地址。
  *
  * <p>服务端把地图服务监听在它自己那台机器上，所以地址由两部分拼成：
  * <ul>
@@ -15,7 +18,7 @@ import net.minecraft.client.multiplayer.ServerData;
  * </ul>
  *
  * <p>以前这里写死 {@code 127.0.0.1}，在专用服务端上指向的就是玩家自己的电脑，
- * 地图窗口自然永远加载不出来。
+ * 网页自然打不开。
  */
 public final class MapEndpoint {
 

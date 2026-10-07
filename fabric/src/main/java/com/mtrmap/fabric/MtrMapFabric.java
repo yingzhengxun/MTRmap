@@ -24,6 +24,9 @@ import java.util.UUID;
  */
 public class MtrMapFabric implements ModInitializer {
 
+    /** 请求里字符串（path / POST 体）的长度上限：导航任务 JSON 可能不小，给宽一点 */
+    private static final int MAX_TEXT = 1 << 20;
+
     @Override
     public void onInitialize() {
         Platform.set(new FabricPlatformImpl());
@@ -37,12 +40,27 @@ public class MtrMapFabric implements ModInitializer {
                 MtrMapCommon.onAvatarReceived(context.server(), payload.uuid(), payload.png()));
         // 地图端口是服务端 -> 客户端，类型两侧都要注册（客户端那边只负责解码）
         PayloadTypeRegistry.playS2C().register(MapPortPayload.TYPE, MapPortPayload.CODEC);
+        // 游戏内地图取数：客户端请求（C2S）+ 服务端分块回包（S2C），
+        // 与端口同步一样，载荷类型必须两侧都声明
+        PayloadTypeRegistry.playC2S().register(MapRequestPayload.TYPE, MapRequestPayload.CODEC);
+        ServerPlayNetworking.registerGlobalReceiver(MapRequestPayload.TYPE, (payload, context) ->
+                MtrMapCommon.onMapRequest(context.server(), context.player(),
+                        payload.requestId(), payload.path(), payload.body()));
+        PayloadTypeRegistry.playS2C().register(MapDataPayload.TYPE, MapDataPayload.CODEC);
         *///?} else {
         ServerPlayNetworking.registerGlobalReceiver(MtrMapCommon.AVATAR_CHANNEL,
                 (server, player, handler, buf, responseSender) -> {
                     UUID uuid = buf.readUUID();
                     byte[] png = buf.readByteArray();
                     MtrMapCommon.onAvatarReceived(server, uuid, png);
+                });
+        // 游戏内地图取数请求：服务端按 path 取数后分块回给该玩家
+        ServerPlayNetworking.registerGlobalReceiver(MtrMapCommon.MAP_REQUEST_CHANNEL,
+                (server, player, handler, buf, responseSender) -> {
+                    int requestId = buf.readVarInt();
+                    String path = buf.readUtf(MAX_TEXT);
+                    String body = buf.readUtf(MAX_TEXT);
+                    MtrMapCommon.onMapRequest(server, player, requestId, path, body);
                 });
         //?}
 

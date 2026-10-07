@@ -94,11 +94,20 @@ public final class MtrMapClientCommon {
             MtrMapCommon.LOGGER.info("F6：关闭地图窗口");
             client.setScreen(null);
         } else if (client.screen == null) {
-            MtrMapCommon.LOGGER.info("F6：打开地图窗口，地图服务地址 {}", com.mtrmap.client.MapEndpoint.base());
+            MtrMapCommon.LOGGER.info("F6：打开地图窗口");
             client.setScreen(new com.mtrmap.client.map.MapScreen());
         } else {
             MtrMapCommon.LOGGER.info("F6：当前界面是 {}，先关掉它再按 F6", client.screen.getClass().getSimpleName());
         }
+    }
+
+    /**
+     * 收到服务端回传的地图数据分块（由平台模块的客户端接收器调用）。
+     *
+     * <p>收到的可能是任意一个分块（顺序由网络保证），拼装与配对交给 {@link MapChannel}。
+     */
+    public static void onMapDataReceived(int requestId, int index, int total, byte[] chunk) {
+        com.mtrmap.client.MapChannel.onChunk(requestId, index, total, chunk);
     }
 
     /** F6 上一 tick 是否按下（边沿判定用） */

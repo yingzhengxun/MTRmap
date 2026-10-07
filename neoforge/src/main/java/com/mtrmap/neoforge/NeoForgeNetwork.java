@@ -1,6 +1,7 @@
 package com.mtrmap.neoforge;
 
 import com.mtrmap.MtrMapCommon;
+import com.mtrmap.client.MtrMapClientCommon;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -44,6 +45,22 @@ public final class NeoForgeNetwork {
                 MapPortPayload.TYPE,
                 MapPortPayload.STREAM_CODEC,
                 (payload, context) -> MtrMapCommon.onMapPortReceived(payload.port()));
+
+        // 游戏内地图取数：客户端请求（C2S）+ 服务端分块回包（S2C）
+        registrar.playToServer(
+                MapRequestPayload.TYPE,
+                MapRequestPayload.STREAM_CODEC,
+                (payload, context) -> {
+                    if (context.player() instanceof ServerPlayer player) {
+                        MtrMapCommon.onMapRequest(MtrMapCommon.getCurrentServer(), player,
+                                payload.requestId(), payload.path(), payload.body());
+                    }
+                });
+        registrar.playToClient(
+                MapDataPayload.TYPE,
+                MapDataPayload.STREAM_CODEC,
+                (payload, context) -> MtrMapClientCommon.onMapDataReceived(
+                        payload.requestId(), payload.index(), payload.total(), payload.chunk()));
     }
 
     /** 客户端把头像推给服务端。 */
@@ -54,5 +71,15 @@ public final class NeoForgeNetwork {
     /** 服务端把地图 HTTP 端口告诉某个玩家。 */
     public static void sendMapPort(ServerPlayer player, int port) {
         PacketDistributor.sendToPlayer(player, new MapPortPayload(port));
+    }
+
+    /** 客户端向服务端要地图数据。 */
+    public static void sendMapRequest(int requestId, String path, String body) {
+        PacketDistributor.sendToServer(new MapRequestPayload(requestId, path, body));
+    }
+
+    /** 服务端把地图数据的一个分块发给某个玩家。 */
+    public static void sendMapData(ServerPlayer player, int requestId, int index, int total, byte[] chunk) {
+        PacketDistributor.sendToPlayer(player, new MapDataPayload(requestId, index, total, chunk));
     }
 }

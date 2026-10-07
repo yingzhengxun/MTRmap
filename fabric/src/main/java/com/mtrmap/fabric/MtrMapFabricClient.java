@@ -27,9 +27,16 @@ public class MtrMapFabricClient implements ClientModInitializer {
         //? if >=1.21.1 {
         /*ClientPlayNetworking.registerGlobalReceiver(MapPortPayload.TYPE, (payload, context) ->
                 MtrMapCommon.onMapPortReceived(payload.port()));
+        // 服务端回传的地图数据分块：交给 MapChannel 按 requestId 拼回整段 JSON
+        ClientPlayNetworking.registerGlobalReceiver(MapDataPayload.TYPE, (payload, context) ->
+                MtrMapClientCommon.onMapDataReceived(payload.requestId(), payload.index(),
+                        payload.total(), payload.chunk()));
         *///?} else {
         ClientPlayNetworking.registerGlobalReceiver(MtrMapCommon.PORT_CHANNEL,
                 (client, handler, buf, responseSender) -> MtrMapCommon.onMapPortReceived(buf.readInt()));
+        ClientPlayNetworking.registerGlobalReceiver(MtrMapCommon.MAP_DATA_CHANNEL,
+                (client, handler, buf, responseSender) -> MtrMapClientCommon.onMapDataReceived(
+                        buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readByteArray()));
         //?}
     }
 }
