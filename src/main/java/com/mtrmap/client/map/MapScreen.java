@@ -368,16 +368,24 @@ public class MapScreen extends Screen {
 
 	private void drawStations(GuiSink sink, MapModel model, int mouseX, int mouseY) {
 		double radius = stationRadius();
+		// 分两趟画：先画普通车站的圆点，再画换乘站的胶囊。
+		// 换乘站的胶囊本来就用来盖住经过该站的所有线路，若先画胶囊，
+		// 旁边车站的圆点会压在胶囊上，看着像换乘站上多了个普通车站。
 		for (MapModel.Station station : model.stations) {
 			if (station.isInterchange() && station.hasBounds()) {
-				double[] capsule = capsule(station, radius * 2);
-				if (capsule != null) {
-					drawCapsule(sink, capsule, 0xFFFFFFFF, alpha(station.color, 1f), 2);
-				}
-			} else {
-				double cx = worldToScreenX(station.x);
-				double cy = worldToScreenY(station.z);
-				disc(sink, cx, cy, radius, 0xFFFFFFFF, alpha(station.color, 1f), 2);
+				continue;
+			}
+			double cx = worldToScreenX(station.x);
+			double cy = worldToScreenY(station.z);
+			disc(sink, cx, cy, radius, 0xFFFFFFFF, alpha(station.color, 1f), 2);
+		}
+		for (MapModel.Station station : model.stations) {
+			if (!station.isInterchange() || !station.hasBounds()) {
+				continue;
+			}
+			double[] capsule = capsule(station, radius * 2);
+			if (capsule != null) {
+				drawCapsule(sink, capsule, 0xFFFFFFFF, alpha(station.color, 1f), 2);
 			}
 		}
 		// 站名：缩得太小不画；换乘站优先占位，重叠的跳过
@@ -623,12 +631,19 @@ public class MapScreen extends Screen {
 		legend(sink, lx, ly, 0xFF50FA7B, 0xFF2DA84F, s("玩家", "Player"));
 		y += infoH + 4;
 
-		// 线路一览：每排最多 4 个
+		// 线路一览：每排最多 4 个。列数要随面板宽度收缩，
+		// 否则窄窗口下格子会顶出面板右边界（面板只画到 w，内容却排到 w 之外）。
 		if (!model.routes.isEmpty()) {
-			int cols = Math.min(4, model.routes.size());
-			int cellW = Math.max(100, (w - (cols - 1) * 4) / cols);
+			int gap = 4;
+			int maxCols = Math.min(4, model.routes.size());
+			int cols = maxCols;
+			// 每格至少要放得下「主名称 / 副名 / 起终站」三行，太窄就少排一列
+			while (cols > 1 && (w - 8 - (cols - 1) * gap) / cols < 92) {
+				cols--;
+			}
+			int cellW = Math.max(1, (w - 8 - (cols - 1) * gap) / cols);
 			int rows = (model.routes.size() + cols - 1) / cols;
-			int maxRows = Math.min(rows, 7);
+			int maxRows = Math.min(rows, 5);
 			int listH = maxRows * ROUTE_ROW_H + 6;
 			panel(sink, x, y, w, listH);
 			for (int r = 0; r < maxRows; r++) {
@@ -638,7 +653,7 @@ public class MapScreen extends Screen {
 						break;
 					}
 					MapModel.Route route = model.routes.get(index);
-					int cx0 = x + 4 + c * (cellW + 4);
+					int cx0 = x + 4 + c * (cellW + gap);
 					int cy0 = y + 4 + r * ROUTE_ROW_H;
 					sink.fill(cx0, cy0 + 1, cx0 + 3, cy0 + 19, alpha(route.color, 1f));
 					String[] n = MapModel.splitName(route.name);
@@ -660,7 +675,12 @@ public class MapScreen extends Screen {
 	}
 
 	private int leftStackWidth() {
-		return Math.min(340, Math.max(170, width - 8 - 8 - TOOL_W - 12));
+		// 右侧还要放工具栏与详情/路径面板，左面板得给它们留出位置：
+		// 以前只按窗口宽度算，窄窗口（GUI 缩放调大后很常见）下左面板能到 340 宽，
+		// 不但盖住一大片地图，还会与右侧面板叠在一起、把地图上的点击也吃掉。
+		int reserved = 8 + TOOL_W + 6 + PANEL_W + 8;
+		int limit = Math.max(150, width - reserved);
+		return Math.min(230, limit);
 	}
 
 	private String routeEnds(MapModel model, MapModel.Route route) {
@@ -1266,17 +1286,61 @@ public class MapScreen extends Screen {
 	}
 
 	private MapModel.Station pickStation(MapModel model, double mouseX, double mouseY, double radius) {
-		double pick = Math.max(8, radius + 3);
+		// 容差：标记本身有大小，点在标记外一点点也算命中
+		double pick = 8;
 		MapModel.Station best = null;
 		double bestDist = pick;
 		for (MapModel.Station station : model.stations) {
-			double d = Math.hypot(worldToScreenX(station.x) - mouseX, worldToScreenY(station.z) - mouseY);
+			double d = markerDistance(station, mouseX, mouseY, radius);
 			if (d < bestDist) {
 				bestDist = d;
 				best = station;
 			}
 		}
 		return best;
+	}
+
+	/**
+	 * 车站标记到鼠标的距离（落在标记上为 0）。
+	 *
+	 * <p>换乘站画的是胶囊，整条胶囊都要算可点范围：只按车站坐标算距离的话，
+	 * 胶囊的两端和中段都点不中，用户会以为「换乘站只有一个特定位置能点」。
+	 */
+	private double markerDistance(MapModel.Station station, double mouseX, double mouseY, double radius) {
+		if (station.isInterchange() && station.hasBounds()) {
+			double[] capsule = capsule(station, radius * 2);
+			if (capsule != null) {
+				return capsuleDistance(capsule, mouseX, mouseY);
+			}
+		}
+		double d = Math.hypot(worldToScreenX(station.x) - mouseX, worldToScreenY(station.z) - mouseY);
+		return Math.max(0, d - radius);
+	}
+
+	/** 点到胶囊轮廓的距离：胶囊 = 两端圆心连成的线段向外扩一个半径 */
+	private double capsuleDistance(double[] capsule, double px, double py) {
+		double cx = capsule[0];
+		double cy = capsule[1];
+		double r = capsule[2];
+		double half = capsule[3];
+		boolean vertical = capsule[4] > 0;
+		double ax = vertical ? cx : cx - half;
+		double ay = vertical ? cy - half : cy;
+		double bx = vertical ? cx : cx + half;
+		double by = vertical ? cy + half : cy;
+		return Math.max(0, segmentDistance(px, py, ax, ay, bx, by) - r);
+	}
+
+	/** 点到线段的距离 */
+	private static double segmentDistance(double px, double py, double ax, double ay, double bx, double by) {
+		double dx = bx - ax;
+		double dy = by - ay;
+		double lenSq = dx * dx + dy * dy;
+		if (lenSq <= 1e-9) {
+			return Math.hypot(px - ax, py - ay);
+		}
+		double t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+		return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 	}
 
 	private void handleStationPick(MapModel.Station station) {

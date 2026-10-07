@@ -877,23 +877,34 @@
 		return { cx: cx, cy: cy, r: r, half: half, vertical: vertical };
 	}
 
+	// 车站标记半径：路径查询模式下适当放大，便于点击
+	function stationRadius() {
+		return routeMode ? Math.max(6, 8 * Math.sqrt(scale)) : Math.max(4, 6 * Math.sqrt(scale));
+	}
+
 	function drawStations() {
 		if (!mapData.stations) return;
-		// 路径查询模式下适当放大车站，便于点击
-		const radius = routeMode ? Math.max(6, 8 * Math.sqrt(scale)) : Math.max(4, 6 * Math.sqrt(scale));
+		const radius = stationRadius();
 
-		// 1) 先把所有站点标记画完，再统一画站名：
-		//    这样站名不会被别的站的标记盖住，也方便让重要的站名优先占位。
+		// 1) 标记分两趟画：先普通车站的圆点，再换乘站的胶囊。
+		//    胶囊本来就是要盖住经过该站的所有线路，若先画胶囊，
+		//    旁边车站的圆点会压在胶囊上，看着像换乘站上多了个普通车站。
 		mapData.stations.forEach(st => {
+			if (isInterchange(st) && interchangeCapsule(st, radius * 2)) return;
 			const p = worldToCanvas(st.x, st.z);
-			// 换乘站画成跑道形，普通车站画成圆点
-			const capsule = isInterchange(st) ? interchangeCapsule(st, radius * 2) : null;
-			if (capsule) {
-				stadiumPath(capsule.cx, capsule.cy, capsule.r, capsule.half, capsule.vertical);
-			} else {
-				ctx.beginPath();
-				ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
-			}
+			ctx.beginPath();
+			ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+			ctx.fillStyle = '#ffffff';
+			ctx.fill();
+			ctx.strokeStyle = intToRgba(st.color, 1);
+			ctx.lineWidth = 2;
+			ctx.stroke();
+		});
+		mapData.stations.forEach(st => {
+			if (!isInterchange(st)) return;
+			const capsule = interchangeCapsule(st, radius * 2);
+			if (!capsule) return;
+			stadiumPath(capsule.cx, capsule.cy, capsule.r, capsule.half, capsule.vertical);
 			ctx.fillStyle = '#ffffff';
 			ctx.fill();
 			ctx.strokeStyle = intToRgba(st.color, 1);
@@ -2249,15 +2260,42 @@
 
 	function getStationAt(mx, my) {
 		if (!mapData.stations) return null;
-		const radius = Math.max(14, 10 * Math.sqrt(scale));
+		// 容差 + 标记自身大小；换乘站的整条胶囊都算可点范围 ——
+		// 只按车站坐标算距离的话，胶囊两端和中段都点不中。
+		const radius = stationRadius();
 		let best = null;
-		let bestDist = radius;
+		let bestDist = 10;
 		mapData.stations.forEach(st => {
-			const p = worldToCanvas(st.x, st.z);
-			const d = Math.hypot(p.x - mx, p.y - my);
+			const d = stationMarkerDistance(st, mx, my, radius);
 			if (d <= bestDist) { bestDist = d; best = st; }
 		});
 		return best;
+	}
+
+	// 车站标记到鼠标的距离（落在标记上为 0）
+	function stationMarkerDistance(st, mx, my, radius) {
+		const capsule = isInterchange(st) ? interchangeCapsule(st, radius * 2) : null;
+		if (capsule) return capsuleDistance(capsule, mx, my);
+		const p = worldToCanvas(st.x, st.z);
+		return Math.max(0, Math.hypot(p.x - mx, p.y - my) - radius);
+	}
+
+	// 点到胶囊轮廓的距离：胶囊 = 两端圆心连成的线段向外扩一个半径
+	function capsuleDistance(cap, px, py) {
+		const ax = cap.vertical ? cap.cx : cap.cx - cap.half;
+		const ay = cap.vertical ? cap.cy - cap.half : cap.cy;
+		const bx = cap.vertical ? cap.cx : cap.cx + cap.half;
+		const by = cap.vertical ? cap.cy + cap.half : cap.cy;
+		return Math.max(0, segmentDistance(px, py, ax, ay, bx, by) - cap.r);
+	}
+
+	function segmentDistance(px, py, ax, ay, bx, by) {
+		const dx = bx - ax;
+		const dy = by - ay;
+		const lenSq = dx * dx + dy * dy;
+		if (lenSq <= 1e-9) return Math.hypot(px - ax, py - ay);
+		const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+		return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 	}
 
 	// 依次选择起点 / 终点；两者都已选时把本次点击当作新的起点
