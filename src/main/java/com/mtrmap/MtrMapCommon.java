@@ -92,6 +92,7 @@ public final class MtrMapCommon {
     /** 客户端收到服务端同步过来的地图端口。 */
     public static void onMapPortReceived(int port) {
         serverMapPort = port > 0 ? port : 0;
+        LOGGER.info("收到服务端同步的地图服务端口：{}", port);
     }
 
     /** 断开连接：忘掉上一个服务器的端口，下次进服重新同步。 */

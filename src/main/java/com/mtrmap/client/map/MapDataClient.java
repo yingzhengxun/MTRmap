@@ -22,7 +22,10 @@ public final class MapDataClient {
 
 	/** 轮询间隔：与网页的地图刷新节奏一致 */
 	private static final long POLL_INTERVAL_MS = 2000L;
-	private static final int TIMEOUT_MS = 1500;
+	/** 连接超时：连不上就尽快失败，别把轮询卡住 */
+	private static final int CONNECT_TIMEOUT_MS = 1500;
+	/** 读取超时：线网大时服务端拼 JSON 要花点时间，给宽一点（网页也是等浏览器默认的几十秒） */
+	private static final int READ_TIMEOUT_MS = 5000;
 
 	private static final MapModel EMPTY = new MapModel();
 	/** 当前快照：轮询线程整体替换，渲染线程只读，靠 volatile 保证可见性 */
@@ -30,12 +33,26 @@ public final class MapDataClient {
 	private static volatile boolean active;
 	private static volatile boolean threadStarted;
 	private static volatile boolean refreshNow;
+	/** 最近一次连接失败的原因（null 表示当前是通的）；窗口会把它显示出来，便于直接看出问题 */
+	private static volatile String lastError;
+	/** 「已连接」日志只打一次，避免每 2 秒刷一行 */
+	private static volatile boolean connectionLogged;
 
 	private MapDataClient() {
 	}
 
 	public static MapModel model() {
 		return current;
+	}
+
+	/** 地图服务地址（例如 http://例子.com:1145），排查连不上问题时用 */
+	public static String baseUrl() {
+		return base();
+	}
+
+	/** 最近一次连接失败的原因；null 表示正常 */
+	public static String lastError() {
+		return lastError;
 	}
 
 	/** 窗口打开：开始轮询并立刻拉一次 */
@@ -59,6 +76,8 @@ public final class MapDataClient {
 	public static void onDisconnect() {
 		active = false;
 		current = EMPTY;
+		lastError = null;
+		connectionLogged = false;
 	}
 
 	/** 立即刷新一次（切换站点开关等场景不用等下一个周期） */
@@ -72,6 +91,7 @@ public final class MapDataClient {
 				if (active || refreshNow) {
 					refreshNow = false;
 					MapModel model = current;
+					String before = lastError;
 					JsonObject data = getJson("/api/data");
 					if (data != null) {
 						// 线网数据里没有玩家，玩家由 /api/players 一并补上
@@ -84,9 +104,11 @@ public final class MapDataClient {
 							current = model.withPlayers(players);
 						}
 					}
+					logStateChange(before);
 				}
 			} catch (Throwable t) {
 				// 服务端未启动 / 端口未监听时静默重试
+				lastError = describe(t);
 			}
 			try {
 				Thread.sleep(POLL_INTERVAL_MS);
@@ -95,6 +117,28 @@ public final class MapDataClient {
 				return;
 			}
 		}
+	}
+
+	/**
+	 * 连接状态发生变化时打一行日志：一直连不上会刷屏，只在「通 → 不通」或「不通 → 通」时记录。
+	 * 专用服务端上最常见的失败就是客户端用错了地址/端口，这一行能直接看出来。
+	 */
+	private static void logStateChange(String before) {
+		String now = lastError;
+		if (java.util.Objects.equals(before, now) && (now != null || connectionLogged)) {
+			return;
+		}
+		if (now == null) {
+			connectionLogged = true;
+			MtrMapCommon.LOGGER.info("已连接地图服务 {}，车站 {} 个", base(), current.stations.size());
+		} else {
+			MtrMapCommon.LOGGER.warn("连接地图服务 {} 失败：{}", base(), now);
+		}
+	}
+
+	private static String describe(Throwable t) {
+		String message = t.getMessage();
+		return message == null || message.isEmpty() ? t.getClass().getSimpleName() : t.getClass().getSimpleName() + ": " + message;
 	}
 
 	// ===== HTTP =====
@@ -130,16 +174,21 @@ public final class MapDataClient {
 		HttpURLConnection conn = null;
 		try {
 			conn = (HttpURLConnection) new URL(base() + path).openConnection();
-			conn.setConnectTimeout(TIMEOUT_MS);
-			conn.setReadTimeout(TIMEOUT_MS);
+			conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
+			conn.setReadTimeout(READ_TIMEOUT_MS);
 			conn.setRequestMethod("GET");
-			if (conn.getResponseCode() != 200) {
+			int code = conn.getResponseCode();
+			if (code != 200) {
+				lastError = "HTTP " + code;
 				return null;
 			}
 			try (InputStream is = conn.getInputStream()) {
-				return new String(MtrMapCommon.readAll(is), StandardCharsets.UTF_8);
+				String body = new String(MtrMapCommon.readAll(is), StandardCharsets.UTF_8);
+				lastError = null;
+				return body;
 			}
 		} catch (Throwable t) {
+			lastError = describe(t);
 			return null;
 		} finally {
 			if (conn != null) {
@@ -175,8 +224,8 @@ public final class MapDataClient {
 		HttpURLConnection conn = null;
 		try {
 			conn = (HttpURLConnection) new URL(base() + path).openConnection();
-			conn.setConnectTimeout(TIMEOUT_MS);
-			conn.setReadTimeout(TIMEOUT_MS);
+			conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
+			conn.setReadTimeout(READ_TIMEOUT_MS);
 			conn.setRequestMethod("POST");
 			conn.setDoOutput(true);
 			conn.setRequestProperty("Content-Type", "application/json");

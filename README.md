@@ -119,6 +119,7 @@ ResourceLocation id = new ResourceLocation("mtrmap", "tex");
 - **Forge 元数据的 `loaderVersion` 是 javafml 主版本**（1.20.1 填 `[47,)`），不是完整的 Forge 版本；NeoForge 的 `loaderVersion` 则是 FML loader 范围 `[1,)`。
 - **专用服务端上客户端不能写死 `127.0.0.1`**：地图服务跑在服务端那台机器上，客户端既访问不到 `127.0.0.1`，也读不到服务器那份 `mtrmap.json`。所以服务端每 tick 把实际监听的端口通过自定义包（通道 `mtrmap:port`，Fabric / Forge / NeoForge 各一套实现）同步给每个在线玩家，客户端由 `client/MapEndpoint` 拼出「当前服务器地址 + 该端口」；单人游戏没有服务器地址，退回 `127.0.0.1` + 本地配置端口。`NavController`（导航/行程）与仪表板按钮同样走这个地址。
 - **不要重新引入底图 / Xaero 依赖**：曾经把 Xaero 世界地图当底图（读它的显存贴图合成瓦片、上传服务端给网页用），现已完全撤掉——地图就是**纯色底上直接叠线网**。`XaeroMapTiles` / `TileTextures` / `WorldMapBridge` / `WorldMapStore`、`/api/worldmap*` 端点、`xaeroworldmap` 硬前置依赖全部删除了，不要再加回来。
+- **视野适配必须等到数据到了再做**：游戏内窗口的数据是后台线程每 2 秒拉一次的，`init()` 里那会儿模型还是空的；这时调 `fitView()` 会把镜头定在原点、缩放定在默认值，等数据真的到了却因为 `viewInitialized` 已是 true 而不再适配 —— 表现就是「工具栏都在、地图一片空白」。网页端一直是在 `fetch` 成功之后才 `if (!viewInitialized) fitView()`，两边行为必须一致。
 
 ## HTTP 接口
 
@@ -288,6 +289,7 @@ A "shell + embedded jars" layout, one jar per MC version:
 - **Forge metadata's `loaderVersion` is the javafml major version** (`[47,)` for 1.20.1), not a full Forge version; NeoForge's `loaderVersion` is the FML loader range `[1,)`.
 - **Never hard-code `127.0.0.1` on the client (dedicated servers)**: the map service runs on the server machine, so a client can neither reach `127.0.0.1` nor read the server's `mtrmap.json`. The server therefore syncs its actual port to every online player via a custom packet (channel `mtrmap:port`, with a Fabric / Forge / NeoForge implementation each) and the client's `client/MapEndpoint` builds `<current server address>:<port>`; single-player has no server address and falls back to `127.0.0.1` plus the local config port. `NavController` (navigation / trips) and the dashboard button use that same address.
 - **Do not reintroduce a base layer / Xaero dependency**: Xaero's World Map was once used as the base layer (reading its GPU textures, assembling tiles and uploading them to the server for the web map); it has been removed completely — the map is now **the network drawn straight onto a plain solid background**. `XaeroMapTiles` / `TileTextures` / `WorldMapBridge` / `WorldMapStore`, the `/api/worldmap*` endpoints and the `xaeroworldmap` hard dependency are all gone; do not add them back.
+- **Fit the view only once the data has arrived**: the in-game window polls on a background thread every 2 seconds, so the model is still empty inside `init()`; calling `fitView()` there pins the camera to the origin at the default zoom, and since `viewInitialized` is already true it never re-fits when the data lands — the symptom is "all the toolbar buttons are there, the map is blank". The web map has always called `if (!viewInitialized) fitView()` *after* a successful `fetch`; both sides must behave the same.
 
 ### HTTP endpoints
 

@@ -91,9 +91,13 @@ public final class MtrMapClientCommon {
             return;
         }
         if (client.screen instanceof com.mtrmap.client.map.MapScreen) {
+            MtrMapCommon.LOGGER.info("F6：关闭地图窗口");
             client.setScreen(null);
         } else if (client.screen == null) {
+            MtrMapCommon.LOGGER.info("F6：打开地图窗口，地图服务地址 {}", com.mtrmap.client.MapEndpoint.base());
             client.setScreen(new com.mtrmap.client.map.MapScreen());
+        } else {
+            MtrMapCommon.LOGGER.info("F6：当前界面是 {}，先关掉它再按 F6", client.screen.getClass().getSimpleName());
         }
     }
 

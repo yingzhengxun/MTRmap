@@ -127,7 +127,8 @@ public class MapScreen extends Screen {
 	protected void init() {
 		super.init();
 		MapDataClient.open();
-		if (!viewInitialized) {
+		// 数据可能还没到（首次拉取在后台线程），到了再让 render 去适配视野
+		if (!viewInitialized && MapDataClient.model().loaded) {
 			viewInitialized = true;
 			fitView();
 		}
@@ -228,6 +229,11 @@ public class MapScreen extends Screen {
 	@Override
 	public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
 		MapModel model = MapDataClient.model();
+		if (!viewInitialized && model.loaded) {
+			// 首次打开时数据还在路上，视野适配要等数据到了再做，否则会把镜头定在原点
+			viewInitialized = true;
+			fitView();
+		}
 		if (!depotsInitialized && model.loaded) {
 			depotsInitialized = true;
 			showDepots = model.showDepots;
@@ -259,8 +265,41 @@ public class MapScreen extends Screen {
 		drawTripsDialog(sink);
 		drawExportDialog(sink);
 		drawToast(sink);
+		drawConnectionHint(sink, model);
 		// 不调用 super.render：原版 Screen.render 会画一遍背景/组件，把地图盖掉。
 		// 本窗口没有任何原版控件，绘制全部由上面的 GuiSink 完成。
+	}
+
+	/**
+	 * 地图画不出来时，在画面中央标出原因。
+	 *
+	 * <p>「窗口打开了但里面空的」最容易被误判成窗口没开，这里直接把「连的是哪个地址、
+	 * 为什么画不出来」写在屏幕上，一眼就能分出是地址/端口不对、还是服务端没数据。
+	 */
+	private void drawConnectionHint(GuiSink sink, MapModel model) {
+		float cx = width / 2f;
+		float y = height / 2f - 16;
+		if (model.loaded) {
+			if (!model.stations.isEmpty()) {
+				return;
+			}
+			sink.text(font, "已连上地图服务，但服务端没有车站数据", cx, y, 0xFFFF8080, true);
+			y += 12;
+			sink.text(font, "（服务端 MTR 线网数据可能没加载成功）", cx, y, dimColor(), true);
+			return;
+		}
+		String error = MapDataClient.lastError();
+		if (error == null) {
+			sink.text(font, "正在连接地图服务…", cx, y, dimColor(), true);
+		} else {
+			sink.text(font, "无法连接地图服务", cx, y, 0xFFFF8080, true);
+		}
+		y += 12;
+		sink.text(font, MapDataClient.baseUrl(), cx, y, textColor(), true);
+		if (error != null) {
+			y += 12;
+			sink.text(font, error, cx, y, dimColor(), true);
+		}
 	}
 
 	// ===== 背景 =====
