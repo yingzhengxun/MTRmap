@@ -2039,23 +2039,40 @@ public class MapScreen extends Screen {
 		double r = capsule[2];
 		double half = capsule[3];
 		boolean vertical = capsule[4] > 0;
-		// 两端圆 + 中间矩形
+		// 填充：中间矩形 + 两端整圆（整圆的内半圆落在矩形里，接缝看不出来）
+		// 轮廓：只描外侧半圆 + 两条直边。
+		// 这里以前两端描的是整圈圆，内半圆的弧线留在胶囊身上，
+		// 看上去就是「胶囊两端各压着一个普通车站的圆点」——必须只描外半圆。
 		if (vertical) {
 			sink.fill((int) (cx - r), (int) (cy - half), (int) (cx + r), (int) (cy + half), fill);
 			fillCircle(sink, (int) Math.round(cx - r), (int) Math.round(cy - half - r), (int) Math.round(r * 2), fill);
 			fillCircle(sink, (int) Math.round(cx - r), (int) Math.round(cy + half - r), (int) Math.round(r * 2), fill);
-			strokeCircle(sink, (int) Math.round(cx - r), (int) Math.round(cy - half - r), (int) Math.round(r * 2), outline, thickness);
-			strokeCircle(sink, (int) Math.round(cx - r), (int) Math.round(cy + half - r), (int) Math.round(r * 2), outline, thickness);
-			sink.fill((int) (cx - r), (int) (cy - half), (int) (cx - r + 1), (int) (cy + half), outline);
-			sink.fill((int) (cx + r - 1), (int) (cy - half), (int) (cx + r), (int) (cy + half), outline);
+			line(sink, cx - r, cy - half, cx - r, cy + half, outline, thickness);
+			line(sink, cx + r, cy - half, cx + r, cy + half, outline, thickness);
+			// 上端圆头取上半圆（π→2π），下端圆头取下半圆（0→π）
+			strokeArc(sink, cx, cy - half, r, Math.PI, Math.PI * 2, outline, thickness);
+			strokeArc(sink, cx, cy + half, r, 0, Math.PI, outline, thickness);
 		} else {
 			sink.fill((int) (cx - half), (int) (cy - r), (int) (cx + half), (int) (cy + r), fill);
 			fillCircle(sink, (int) Math.round(cx - half - r), (int) Math.round(cy - r), (int) Math.round(r * 2), fill);
 			fillCircle(sink, (int) Math.round(cx + half - r), (int) Math.round(cy - r), (int) Math.round(r * 2), fill);
-			strokeCircle(sink, (int) Math.round(cx - half - r), (int) Math.round(cy - r), (int) Math.round(r * 2), outline, thickness);
-			strokeCircle(sink, (int) Math.round(cx + half - r), (int) Math.round(cy - r), (int) Math.round(r * 2), outline, thickness);
-			sink.fill((int) (cx - half), (int) (cy - r), (int) (cx + half), (int) (cy - r + 1), outline);
-			sink.fill((int) (cx - half), (int) (cy + r - 1), (int) (cx + half), (int) (cy + r), outline);
+			line(sink, cx - half, cy - r, cx + half, cy - r, outline, thickness);
+			line(sink, cx - half, cy + r, cx + half, cy + r, outline, thickness);
+			// 左端圆头取左半圆（π/2→3π/2），右端圆头取右半圆（-π/2→π/2）
+			strokeArc(sink, cx - half, cy, r, Math.PI / 2, Math.PI * 1.5, outline, thickness);
+			strokeArc(sink, cx + half, cy, r, -Math.PI / 2, Math.PI / 2, outline, thickness);
+		}
+	}
+
+	/** 圆弧线（只描外轮廓，不填充）；角度按屏幕坐标：0 = 右、π/2 = 下 */
+	private void strokeArc(GuiSink sink, double cx, double cy, double r, double from, double to, int color, int thickness) {
+		int segments = r < 8 ? 8 : 16;
+		double step = (to - from) / segments;
+		for (int i = 0; i < segments; i++) {
+			double a0 = from + i * step;
+			double a1 = a0 + step;
+			line(sink, cx + Math.cos(a0) * r, cy + Math.sin(a0) * r,
+					cx + Math.cos(a1) * r, cy + Math.sin(a1) * r, color, thickness);
 		}
 	}
 
