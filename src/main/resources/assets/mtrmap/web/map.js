@@ -1290,35 +1290,42 @@
 		return adj;
 	}
 
-	// 站外步行换乘边：两座车站直线距离 ≤ 1 km、且没有任何共线时，
-	// 认为下车后可以步行过去换乘（距离按两站中心点直线距离算，换乘次数仍 +1）。
-	// 共线的两站不建边 —— 那本该直接坐车过去。
+	// 站外步行换乘边：每条「当前站没有的线路」只连到离当前站最近的那个车站。
+	// 以前是把 1 km 内的车站两两连起来，规划器可能让人走过一个更近的同线路车站、
+	// 跑到更远的站去换乘；现在严格取最近的那一站。
+	// 当前站已有的线路不建步行边：同站换乘（transfer 边）本来就能换，不必出站。
 	function addWalkEdges(metrics, addEdge) {
 		const stations = mapData.stations || [];
-		for (let i = 0; i < stations.length; i++) {
-			const a = stations[i];
+		stations.forEach(a => {
 			const ra = metrics.stationRoutes[a.id];
-			if (!ra || ra.length === 0) continue;
-			for (let j = i + 1; j < stations.length; j++) {
-				const b = stations[j];
-				const rb = metrics.stationRoutes[b.id];
-				if (!rb || rb.length === 0) continue;
+			if (!ra || ra.length === 0) return;
+			// 目标线路 -> 离 a 最近的车站 { dist, stationId }
+			const nearest = {};
+			stations.forEach(b => {
+				if (b.id === a.id) return;
 				// 先用包围盒排除，避免大量无谓的开方
 				const dx = b.x - a.x;
-				if (dx < -ROUTE_WALK_MAX_METERS || dx > ROUTE_WALK_MAX_METERS) continue;
+				if (dx < -ROUTE_WALK_MAX_METERS || dx > ROUTE_WALK_MAX_METERS) return;
 				const dz = b.z - a.z;
-				if (dz < -ROUTE_WALK_MAX_METERS || dz > ROUTE_WALK_MAX_METERS) continue;
-				if (ra.some(rid => rb.indexOf(rid) !== -1)) continue;
+				if (dz < -ROUTE_WALK_MAX_METERS || dz > ROUTE_WALK_MAX_METERS) return;
 				const d = Math.hypot(dx, dz);
-				if (d > ROUTE_WALK_MAX_METERS) continue;
-				ra.forEach(ridA => {
-					rb.forEach(ridB => {
-						addEdge(ridA + ':' + a.id, ridB + ':' + b.id, d, 'walk');
-						addEdge(ridB + ':' + b.id, ridA + ':' + a.id, d, 'walk');
-					});
+				if (d > ROUTE_WALK_MAX_METERS) return;
+				const rb = metrics.stationRoutes[b.id];
+				if (!rb || rb.length === 0) return;
+				rb.forEach(ridB => {
+					if (ra.indexOf(ridB) !== -1) return;
+					const best = nearest[ridB];
+					if (!best || d < best.dist) nearest[ridB] = { dist: d, stationId: b.id };
 				});
-			}
-		}
+			});
+			Object.keys(nearest).forEach(ridB => {
+				const info = nearest[ridB];
+				ra.forEach(ridA => {
+					addEdge(ridA + ':' + a.id, ridB + ':' + info.stationId, info.dist, 'walk');
+					addEdge(ridB + ':' + info.stationId, ridA + ':' + a.id, info.dist, 'walk');
+				});
+			});
+		});
 	}
 
 	// 代价用 [主目标, 次目标] 表示，做字典序比较

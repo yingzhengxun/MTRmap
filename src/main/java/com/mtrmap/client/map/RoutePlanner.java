@@ -2,10 +2,8 @@ package com.mtrmap.client.map;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * 路径查询：与网页 map.js 完全同一套算法。
@@ -14,7 +12,8 @@ import java.util.Set;
  * <ul>
  *   <li>ride —— 同一条线路上相邻车站（双向）；</li>
  *   <li>transfer —— 同一车站换乘另一条线（距离 0，代价里计入换乘惩罚）；</li>
- *   <li>walk —— 直线距离 ≤ 1 km 且不共线的两站之间步行换乘。</li>
+ *   <li>walk —— 站外步行换乘：每条本线没有的线路，只连到离本站最近的那一站
+ *       （直线距离 ≤ 1 km）；本线已有的线路不建步行边，同站换乘优先。</li>
  * </ul>
  * 三种目标（最短 / 最省时 / 最少换乘）用不同的边权，代价是
  * {@code [主目标, 次目标]} 的字典序。
@@ -236,17 +235,20 @@ public final class RoutePlanner {
 	}
 
 	private static void addWalkEdges(MapModel model, Metrics metrics, Map<String, List<Edge>> adjacency) {
+		// 站外步行换乘：每条「当前站没有的线路」只连到离当前站最近的那个车站。
+		// 以前是把 1 km 内的车站两两连起来，规划器可能让人走过一个更近的同线路车站、
+		// 跑到更远的站去换乘；现在严格取最近的那一站。
+		// 当前站已有的线路不建步行边：同站换乘（transfer 边）本来就能换，不必出站。
 		List<MapModel.Station> stations = model.stations;
-		for (int i = 0; i < stations.size(); i++) {
-			MapModel.Station a = stations.get(i);
+		for (MapModel.Station a : stations) {
 			List<Long> routesA = metrics.stationRoutes.get(a.id);
 			if (routesA == null || routesA.isEmpty()) {
 				continue;
 			}
-			for (int j = i + 1; j < stations.size(); j++) {
-				MapModel.Station b = stations.get(j);
-				List<Long> routesB = metrics.stationRoutes.get(b.id);
-				if (routesB == null || routesB.isEmpty()) {
+			// 目标线路 -> 该线路上离 a 最近的车站（[距离, 车站ID]）
+			Map<Long, double[]> nearest = new HashMap<>();
+			for (MapModel.Station b : stations) {
+				if (b.id == a.id) {
 					continue;
 				}
 				double dx = b.x - a.x;
@@ -257,32 +259,34 @@ public final class RoutePlanner {
 				if (dz < -WALK_MAX_METERS || dz > WALK_MAX_METERS) {
 					continue;
 				}
-				// 共线的两站本该直接坐车过去，不建步行边
-				if (shareRoute(routesA, routesB)) {
-					continue;
-				}
 				double d = Math.hypot(dx, dz);
 				if (d > WALK_MAX_METERS) {
 					continue;
 				}
-				for (Long ridA : routesA) {
-					for (Long ridB : routesB) {
-						addEdge(adjacency, ridA + ":" + a.id, ridB + ":" + b.id, d, Kind.WALK);
-						addEdge(adjacency, ridB + ":" + b.id, ridA + ":" + a.id, d, Kind.WALK);
+				List<Long> routesB = metrics.stationRoutes.get(b.id);
+				if (routesB == null || routesB.isEmpty()) {
+					continue;
+				}
+				for (Long ridB : routesB) {
+					if (routesA.contains(ridB)) {
+						continue;
+					}
+					double[] best = nearest.get(ridB);
+					if (best == null || d < best[0]) {
+						nearest.put(ridB, new double[]{d, b.id});
 					}
 				}
 			}
-		}
-	}
-
-	private static boolean shareRoute(List<Long> a, List<Long> b) {
-		Set<Long> set = new HashSet<>(a);
-		for (Long id : b) {
-			if (set.contains(id)) {
-				return true;
+			for (Map.Entry<Long, double[]> entry : nearest.entrySet()) {
+				long ridB = entry.getKey();
+				double d = entry.getValue()[0];
+				long stationB = (long) entry.getValue()[1];
+				for (Long ridA : routesA) {
+					addEdge(adjacency, ridA + ":" + a.id, ridB + ":" + stationB, d, Kind.WALK);
+					addEdge(adjacency, ridB + ":" + stationB, ridA + ":" + a.id, d, Kind.WALK);
+				}
 			}
 		}
-		return false;
 	}
 
 	private static double segmentDistance(Metrics metrics, long routeId, long a, long b) {
