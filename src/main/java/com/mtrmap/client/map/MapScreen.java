@@ -1288,6 +1288,24 @@ public class MapScreen extends Screen {
 	private MapModel.Station pickStation(MapModel model, double mouseX, double mouseY, double radius) {
 		// 容差：标记本身有大小，点在标记外一点点也算命中
 		double pick = 8;
+		// 换乘站胶囊优先：胶囊很长，范围内常压着别的车站圆点。
+		// 若只按距离取最近，先遍历到的普通站会把命中抢走，
+		// 用户点胶囊两端或中段时就选不到换乘站。这里先把胶囊扫一遍。
+		MapModel.Station capsuleHit = null;
+		double capsuleDist = pick;
+		for (MapModel.Station station : model.stations) {
+			if (!station.isInterchange() || !station.hasBounds()) {
+				continue;
+			}
+			double d = markerDistance(station, mouseX, mouseY, radius);
+			if (d < capsuleDist) {
+				capsuleDist = d;
+				capsuleHit = station;
+			}
+		}
+		if (capsuleHit != null) {
+			return capsuleHit;
+		}
 		MapModel.Station best = null;
 		double bestDist = pick;
 		for (MapModel.Station station : model.stations) {

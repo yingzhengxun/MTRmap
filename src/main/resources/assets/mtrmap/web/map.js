@@ -2267,9 +2267,19 @@
 
 	function getStationAt(mx, my) {
 		if (!mapData.stations) return null;
-		// 容差 + 标记自身大小；换乘站的整条胶囊都算可点范围 ——
-		// 只按车站坐标算距离的话，胶囊两端和中段都点不中。
 		const radius = stationRadius();
+		// 换乘站胶囊优先：胶囊很长，范围内常压着别的车站圆点。
+		// 若只按距离取最近，先遍历到的普通站会把命中抢走，
+		// 用户点胶囊两端或中段时就选不到换乘站。这里先把胶囊扫一遍。
+		let capsuleHit = null;
+		let capsuleDist = 10;
+		mapData.stations.forEach(st => {
+			if (!isInterchange(st) || !interchangeCapsule(st, radius * 2)) return;
+			const d = stationMarkerDistance(st, mx, my, radius);
+			if (d < capsuleDist) { capsuleDist = d; capsuleHit = st; }
+		});
+		if (capsuleHit) return capsuleHit;
+		// 容差 + 标记自身大小
 		let best = null;
 		let bestDist = 10;
 		mapData.stations.forEach(st => {
@@ -2293,10 +2303,10 @@
 		const ay = cap.vertical ? cap.cy - cap.half : cap.cy;
 		const bx = cap.vertical ? cap.cx : cap.cx + cap.half;
 		const by = cap.vertical ? cap.cy + cap.half : cap.cy;
-		return Math.max(0, segmentDistance(px, py, ax, ay, bx, by) - cap.r);
+		return Math.max(0, pointSegmentDistance(px, py, ax, ay, bx, by) - cap.r);
 	}
 
-	function segmentDistance(px, py, ax, ay, bx, by) {
+	function pointSegmentDistance(px, py, ax, ay, bx, by) {
 		const dx = bx - ax;
 		const dy = by - ay;
 		const lenSq = dx * dx + dy * dy;
@@ -2312,6 +2322,8 @@
 			routeStartId = station.id;
 			routeFromMyLocation = false;
 		} else if (routeEndId === null) {
+			// 与游戏内一致：终点不能再选起点同一个站（否则会算出「起点与终点相同」）
+			if (station.id === routeStartId) return;
 			routeEndId = station.id;
 		} else {
 			routeStartId = station.id;
@@ -2689,7 +2701,7 @@
 			return;
 		}
 		if (detailState.type === 'route') {
-			renderRouteDetail();
+			renderRouteInfo();
 		} else {
 			renderStationDetail();
 		}
@@ -2731,7 +2743,7 @@
 		});
 	}
 
-	function renderRouteDetail() {
+	function renderRouteInfo() {
 		const route = (mapData.routes || []).find(r => r.id === detailState.id);
 		if (!route) { closeDetailPanel(); return; }
 		const n = splitName(route.name);
