@@ -1,0 +1,14 @@
+{
+    "key.rbmm.map_button": "交通线路图",
+    "key.rbmm.open_map": "打开地图窗口",
+    "key.rbmm.map_title": "若初的更好的 MTR 地图",
+    "key.rbmm.toggle_nav": "收起/展开导航",
+    "key.rbmm.open_settings": "打开模组设置",
+    "key.categories.rbmm": "若初的更好的 MTR 地图",
+    "key.rbmm.settings_title": "若初的更好的 MTR 地图 - 设置",
+    "key.rbmm.settings_hint": "F6 开关地图 · PgUp 收起/展开导航（可在按键绑定里改）",
+    "key.rbmm.tts_on": "讲述人语音播报：开",
+    "key.rbmm.tts_off": "讲述人语音播报：关",
+    "key.rbmm.depot_on": "显示车厂：开",
+    "key.rbmm.depot_off": "显示车厂：关"
+}

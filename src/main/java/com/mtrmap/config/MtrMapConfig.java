@@ -22,7 +22,7 @@ public class MtrMapConfig {
 
 	private static Path getConfigPath() {
 		if (configPath == null) {
-			configPath = Platform.getConfigDir().resolve("mods/mapconfig/mtrmap.json");
+			configPath = Platform.getConfigDir().resolve("mods/mapconfig/rbmm.json");
 		}
 		return configPath;
 	}
@@ -38,6 +38,16 @@ public class MtrMapConfig {
 	public static void setShowDepots(boolean value) {
 		data.showDepots = value;
 	}
+
+	/** 讲述人语音播报（导航过程中的上车 / 到站 / 完成提示） */
+	public static boolean isTtsEnabled() {
+		return data.ttsEnabled;
+	}
+
+	public static void setTtsEnabled(boolean value) {
+		data.ttsEnabled = value;
+	}
+
 
 	/** HTTP 服务器端口（默认 1145），即配置文件里填的端口 */
 	public static int getPort() {
@@ -100,5 +110,7 @@ public class MtrMapConfig {
 	public static class ConfigData {
 		public boolean showDepots = true;
 		public int port = 1145;
+		/** 讲述人语音播报，默认开启 */
+		public boolean ttsEnabled = true;
 	}
 }

@@ -2,6 +2,8 @@ package com.mtrmap.fabric;
 
 import com.mtrmap.MtrMapCommon;
 import com.mtrmap.client.MtrMapClientCommon;
+import com.mtrmap.client.MtrMapKeys;
+import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import com.mtrmap.platform.Platform;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -21,6 +23,12 @@ public class MtrMapFabricClient implements ClientModInitializer {
 
         ClientTickEvents.END_CLIENT_TICK.register(MtrMapClientCommon::onClientTick);
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> MtrMapClientCommon.onDisconnect());
+
+        // 热键：注册进 MC 的「按键绑定」界面（F6 开关地图 / PgUp 收起展开导航 / 打开设置）
+        MtrMapKeys.create();
+        KeyBindingHelper.registerKeyBinding(MtrMapKeys.openMap);
+        KeyBindingHelper.registerKeyBinding(MtrMapKeys.toggleNav);
+        KeyBindingHelper.registerKeyBinding(MtrMapKeys.openSettings);
 
         // 服务端告知地图 HTTP 端口：专用服务端上客户端读不到服务器那份配置，
         // 只能靠这个包知道地图服务监听在哪个端口

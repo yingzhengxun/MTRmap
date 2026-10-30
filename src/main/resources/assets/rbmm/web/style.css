@@ -1467,3 +1467,37 @@ body.route-mode #detailPanel {
 	color: var(--text-color);
 	transition: color 0.3s, border-color 0.3s;
 }
+/* ===== 彩蛋：识别到「临玖地图」时的大字标题 ===== */
+#eggOverlay {
+	position: fixed;
+	inset: 0;
+	z-index: 2000;
+	display: none;
+	align-items: center;
+	justify-content: center;
+	flex-direction: column;
+	background: rgba(0, 0, 0, 0.92);
+	cursor: pointer;
+	text-align: center;
+}
+
+#eggTitle {
+	font-size: clamp(48px, 13vw, 260px);
+	font-weight: 900;
+	letter-spacing: 0.08em;
+	color: #7ec8e3;
+	text-shadow: 0 0 28px rgba(126, 200, 227, 0.65), 0 0 80px rgba(126, 200, 227, 0.35);
+	animation: eggPulse 1.6s ease-in-out infinite alternate;
+}
+
+#eggHint {
+	margin-top: 26px;
+	font-size: 14px;
+	color: #b8b8b8;
+	letter-spacing: 0.2em;
+}
+
+@keyframes eggPulse {
+	from { transform: scale(1); opacity: 0.92; }
+	to { transform: scale(1.03); opacity: 1; }
+}

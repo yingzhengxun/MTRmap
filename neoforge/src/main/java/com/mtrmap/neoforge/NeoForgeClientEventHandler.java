@@ -12,7 +12,7 @@ import net.neoforged.neoforge.client.event.ClientTickEvent;
  * NeoForge 客户端事件转接：客户端 tick 与断开连接。
  * 用 {@code value = Dist.CLIENT} 限定只在客户端注册，避免在专用服务器上触碰客户端类。
  */
-@EventBusSubscriber(modid = "mtrmap", value = Dist.CLIENT)
+@EventBusSubscriber(modid = "rbmm", value = Dist.CLIENT)
 public final class NeoForgeClientEventHandler {
 
     private static boolean clientInitialized = false;

@@ -31,7 +31,7 @@ public class MapScreen extends Screen {
 	private static final double MIN_SCALE = 0.02;
 	private static final double MAX_SCALE = 4.0;
 	/** 左键从按下到移动多少像素才当成「拖地图」，小于它算「点一下」 */
-	private static final double DRAG_THRESHOLD = 4.0;
+	private static final double DRAG_THRESHOLD = 8.0;
 
 	private double centerX;
 	private double centerZ;
@@ -81,6 +81,8 @@ public class MapScreen extends Screen {
 	private String routeMessage;
 	private RoutePlanner.StartWalk startWalk;
 	private String lastNavRev;
+	/** 彩蛋全屏标题是否打开 */
+	private boolean eggOpen;
 
 	/** 悬停提示 */
 	private String hoverText;
@@ -118,7 +120,7 @@ public class MapScreen extends Screen {
 	private static final int ROUTE_ROW_H = 24;
 
 	public MapScreen() {
-		super(Component.translatable("key.mtrmap.map_title"));
+		super(Component.translatable("key.rbmm.map_title"));
 	}
 
 	// ===== 生命周期 =====
@@ -264,10 +266,30 @@ public class MapScreen extends Screen {
 		// 行程记录 / 导出弹窗画在最上层
 		drawTripsDialog(sink);
 		drawExportDialog(sink);
+		drawEggOverlay(sink);
 		drawToast(sink);
 		drawConnectionHint(sink, model);
 		// 不调用 super.render：原版 Screen.render 会画一遍背景/组件，把地图盖掉。
 		// 本窗口没有任何原版控件，绘制全部由上面的 GuiSink 完成。
+	}
+
+	/** 彩蛋：整屏大字标题（识别到「临玖地图」时从工具栏打开） */
+	private void drawEggOverlay(GuiSink sink) {
+		if (!eggOpen) {
+			return;
+		}
+		sink.push();
+		sink.translate(0f, 0f, 500f);
+		sink.fill(0, 0, width, height, 0xF0000000);
+		String msg = s("临玖过于发达", "Linjiu is way too developed");
+		float scale = 3.0f;
+		sink.push();
+		sink.translate(width / 2f, height / 2f - 12f, 0f);
+		sink.scale(scale);
+		sink.text(font, msg, 0f, 0f, 0xFF7EC8E3, true);
+		sink.pop();
+		sink.text(font, s("点一下返回", "Click to return"), width / 2f, height / 2f + 30f, 0xFFB8B8B8, true);
+		sink.pop();
 	}
 
 	/**
@@ -707,7 +729,7 @@ public class MapScreen extends Screen {
 	private List<Btn> toolbarButtons() {
 		List<Btn> buttons = new ArrayList<>();
 		int x = width - 8 - TOOL_W;
-		int totalRows = 11;
+		int totalRows = 12 + (MapDataClient.model().ljEasterEgg ? 1 : 0);
 		int gap = 2;
 		int totalH = totalRows * (TOOL_W + gap) - gap;
 		int y = (height - totalH) / 2;
@@ -731,6 +753,12 @@ public class MapScreen extends Screen {
 		y += TOOL_W + gap;
 		buttons.add(new Btn("trips", x, y, "🗒", s("行程记录", "Trip records"), tripsOpen));
 		y += TOOL_W + gap;
+		buttons.add(new Btn("settings", x, y, "⚙", s("选项", "Options"), false));
+		y += TOOL_W + gap;
+		if (MapDataClient.model().ljEasterEgg) {
+			buttons.add(new Btn("egg", x, y, "🎁", s("神秘小彩蛋", "Mystery egg"), eggOpen));
+			y += TOOL_W + gap;
+		}
 		buttons.add(new Btn("close", x, y, "×", s("关闭 (F6)", "Close (F6)"), false));
 		return buttons;
 	}
@@ -1377,6 +1405,11 @@ public class MapScreen extends Screen {
 			routeEndId = station.id;
 			computeRoutes();
 		} else {
+			// 起点、终点都已选好时，点第三站才开始新一次查询；
+			// 若点的就是当前起点或终点（点重了），保持现有查询不动
+			if (station.id == routeStartId || station.id == routeEndId) {
+				return;
+			}
 			routeStartId = station.id;
 			routeEndId = -1;
 			routeOptions = new ArrayList<>();
@@ -1630,6 +1663,11 @@ public class MapScreen extends Screen {
 
 	@Override
 	public boolean mouseClicked(double mouseX, double mouseY, int button) {
+		// 彩蛋全屏标题：点一下关掉
+		if (eggOpen) {
+			eggOpen = false;
+			return true;
+		}
 		// 导出 / 行程记录都是模态弹窗：开着的时候所有点击都只给它
 		if (exportOpen) {
 			exportDialogClick(mouseX, mouseY);
@@ -1711,7 +1749,13 @@ public class MapScreen extends Screen {
 	public boolean mouseReleased(double mouseX, double mouseY, int button) {
 		if (pressed && !dragging && button == 0) {
 			// 按下后没有拖动过 → 当成点击：选站
-			MapModel.Station station = pickStation(MapDataClient.model(), mouseX, mouseY, stationRadius());
+			double radius = stationRadius();
+			MapModel.Station station = pickStation(MapDataClient.model(), mouseX, mouseY, radius);
+			if (station == null) {
+				// 换乘站的胶囊很长，按下时点中了、松开时指针偏出标记几像素也算点中；
+				// 松开位置没命中就退回按下位置再判一次
+				station = pickStation(MapDataClient.model(), pressX, pressY, radius);
+			}
 			if (station != null) {
 				handleStationPick(station);
 			}
@@ -1955,6 +1999,15 @@ public class MapScreen extends Screen {
 				if (tripsOpen) {
 					loadTrips();
 				}
+				break;
+			case "settings":
+				// 与模组菜单里的「配置」共用同一个设置界面
+				if (this.minecraft != null) {
+					this.minecraft.setScreen(new com.mtrmap.client.SettingsScreen(this));
+				}
+				break;
+			case "egg":
+				eggOpen = true;
 				break;
 			case "close":
 				onClose();

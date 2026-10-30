@@ -24,7 +24,7 @@ import net.minecraftforge.fml.event.server.FMLServerStoppingEvent;
  * Forge 服务端事件转接：生命周期 / tick / 命令。
  * 默认 bus = FORGE，默认 value = 两端，因此客户端集成服务器与专用服务器都会生效。
  */
-@Mod.EventBusSubscriber(modid = "mtrmap")
+@Mod.EventBusSubscriber(modid = "rbmm")
 public final class ForgeEventHandler {
 
     private ForgeEventHandler() {

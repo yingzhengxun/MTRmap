@@ -52,33 +52,33 @@ public final class MtrMapCommon {
     /** 客户端推送头像所使用的网络通道 */
     //? if >=1.21.1 {
     /*public static final ResourceLocation AVATAR_CHANNEL =
-            ResourceLocation.fromNamespaceAndPath("mtrmap", "avatar");
+            ResourceLocation.fromNamespaceAndPath("rbmm", "avatar");
     *///?} else {
-    public static final ResourceLocation AVATAR_CHANNEL = new ResourceLocation("mtrmap", "avatar");
+    public static final ResourceLocation AVATAR_CHANNEL = new ResourceLocation("rbmm", "avatar");
     //?}
 
     /** 服务端把地图 HTTP 端口同步给客户端所使用的网络通道 */
     //? if >=1.21.1 {
     /*public static final ResourceLocation PORT_CHANNEL =
-            ResourceLocation.fromNamespaceAndPath("mtrmap", "port");
+            ResourceLocation.fromNamespaceAndPath("rbmm", "port");
     *///?} else {
-    public static final ResourceLocation PORT_CHANNEL = new ResourceLocation("mtrmap", "port");
+    public static final ResourceLocation PORT_CHANNEL = new ResourceLocation("rbmm", "port");
     //?}
 
     /** 游戏内地图窗口向服务端取数所使用的网络通道（客户端 -> 服务端） */
     //? if >=1.21.1 {
     /*public static final ResourceLocation MAP_REQUEST_CHANNEL =
-            ResourceLocation.fromNamespaceAndPath("mtrmap", "map_request");
+            ResourceLocation.fromNamespaceAndPath("rbmm", "map_request");
     *///?} else {
-    public static final ResourceLocation MAP_REQUEST_CHANNEL = new ResourceLocation("mtrmap", "map_request");
+    public static final ResourceLocation MAP_REQUEST_CHANNEL = new ResourceLocation("rbmm", "map_request");
     //?}
 
     /** 服务端分块回传地图数据所使用的网络通道（服务端 -> 客户端） */
     //? if >=1.21.1 {
     /*public static final ResourceLocation MAP_DATA_CHANNEL =
-            ResourceLocation.fromNamespaceAndPath("mtrmap", "map_data");
+            ResourceLocation.fromNamespaceAndPath("rbmm", "map_data");
     *///?} else {
-    public static final ResourceLocation MAP_DATA_CHANNEL = new ResourceLocation("mtrmap", "map_data");
+    public static final ResourceLocation MAP_DATA_CHANNEL = new ResourceLocation("rbmm", "map_data");
     //?}
 
     /**
@@ -256,7 +256,7 @@ public final class MtrMapCommon {
 
     /** 注册 /mtrmap showdepots <true|false> 命令。 */
     public static void registerCommands(com.mojang.brigadier.CommandDispatcher<CommandSourceStack> dispatcher) {
-        dispatcher.register(Commands.literal("mtrmap")
+        dispatcher.register(Commands.literal("rbmm")
                 .then(Commands.literal("showdepots")
                         .then(Commands.argument("value", BoolArgumentType.bool())
                                 .executes(context -> {

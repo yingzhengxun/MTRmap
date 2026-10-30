@@ -74,6 +74,12 @@ public final class NavHud {
             return;
         }
 
+        // PgUp 收起态：只显示一枚胶囊，里面是当前正在进行的那一步
+        if (NavController.isCollapsed()) {
+            drawCapsule(sink, font, guiW, task);
+            return;
+        }
+
         int idx = NavController.getStepIndex();
         if (idx != shownIndex) {
             fromIndex = shownIndex;
@@ -156,8 +162,8 @@ public final class NavHud {
                 line1 = "步行 " + fmtDist(s.distance) + (s.dir.isEmpty() ? "" : " 往" + s.dir);
                 line2 = "到 " + s.to;
             } else {
-                line1 = s.line + " 开往 " + s.towards;
-                line2 = s.rideCount + " 站 → " + s.to;
+                line1 = "在" + s.from + "站上车 · " + s.line;
+                line2 = "开往 " + s.towards + " · " + s.rideCount + " 站 → " + s.to;
             }
             text(sink, font, fit(font, line1, innerW - (sx - tx)), sx, ry + 1, c);
             text(sink, font, fit(font, line2, innerW - (sx - tx)), sx, ry + 11, applyAlpha(DIM, 0.85f));
@@ -167,6 +173,31 @@ public final class NavHud {
         String footer = fit(font, "Ctrl+x可以退出导航哦", innerW);
         text(sink, font, footer, tx, firstRowY + stepCount * ROW_H + 2, applyAlpha(FOOTER, titleAlpha));
 
+        sink.pop();
+    }
+
+    /** 收起态胶囊：贴在右上角，只显示当前正在进行的任务 */
+    private static void drawCapsule(GuiSink sink, Font font, int guiW, NavTask task) {
+        int idx = NavController.getStepIndex();
+        if (idx < 0 || idx >= task.steps.length) {
+            return;
+        }
+        NavTask.Step s = task.steps[idx];
+        String text = s.walk
+                ? "🚶 步行到 " + s.to + "站"
+                : "▶ 在" + s.from + "站上车 · " + s.line + " 开往 " + s.towards;
+        text = fit(font, text, guiW / 2);
+        int w = font.width(text) + 22;
+        int h = 16;
+        int x = guiW - w - MARGIN;
+        int y = MARGIN;
+        sink.push();
+        sink.translate(0f, 0f, 300f);
+        sink.fill(x, y, x + w, y + h, 0xE6000000);
+        border(sink, x, y, w, h, 0xFF3A3A3A);
+        int dot = s.walk ? 0xFFFFD040 : opaque(s.color);
+        sink.fill(x + 6, y + 5, x + 9, y + 11, dot);
+        sink.text(font, text, x + w / 2f + 1f, y + 4, TITLE, true);
         sink.pop();
     }
 

@@ -28,10 +28,10 @@ architectury {
     fabric()
 }
 
-// 见根 build.gradle：固定 refmap 文件名，供 mtrmap.mixins.json 引用
+// 见根 build.gradle：固定 refmap 文件名，供 rbmm.mixins.json 引用
 loom {
     mixin {
-        defaultRefmapName = "mtrmap-fabric-refmap.json"
+        defaultRefmapName = "rbmm-fabric-refmap.json"
     }
 }
 
@@ -76,7 +76,7 @@ processResources {
     filesMatching("fabric.mod.json") {
         expand props
     }
-    // compatibilityLevel 与根脚本里的 mtrmap.mixins.json 保持一致
+    // compatibilityLevel 与根脚本里的 rbmm.mixins.json 保持一致
     def mixinCompat = "JAVA_17"
     inputs.property "compatibilityLevel", mixinCompat
 }
@@ -94,13 +94,13 @@ tasks.withType(JavaCompile).configureEach {
 shadowJar {
     exclude "architectury.common.json"
 
-    // common 的 refmap 名字带 MC 版本号（mtrmap-common-1.20.1-refmap.json），
-    // 而 mtrmap.mixins.json 里的 "refmap" 只能写死一个固定名字，否则 Fabric 下注入静默失败。
+    // common 的 refmap 名字带 MC 版本号（rbmm-common-1.20.1-refmap.json），
+    // 而 rbmm.mixins.json 里的 "refmap" 只能写死一个固定名字，否则 Fabric 下注入静默失败。
     // common 的产物是通过 configurations 合并进来的，这类条目不走 rename/eachFile，
     // 所以这里用 zipTree 手工再放一份改好名的。
     from(project.provider { zipTree(project.configurations.shadowCommon.singleFile) }) {
-        include "mtrmap-common-*-refmap.json"
-        rename "mtrmap-common-.*-refmap\\.json", "mtrmap-common-refmap.json"
+        include "rbmm-common-*-refmap.json"
+        rename "rbmm-common-.*-refmap\\.json", "rbmm-common-refmap.json"
     }
 
     configurations = [project.configurations.shadowCommon]

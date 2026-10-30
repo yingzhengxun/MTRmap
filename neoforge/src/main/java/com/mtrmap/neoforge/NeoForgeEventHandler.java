@@ -15,7 +15,7 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
  * 因此客户端集成服务器与专用服务器都会生效。
  * 1.21.1 的 tick 事件已拆分为 {@code ServerTickEvent.Pre/Post}，Post 即原 Phase.END。
  */
-@EventBusSubscriber(modid = "mtrmap")
+@EventBusSubscriber(modid = "rbmm")
 public final class NeoForgeEventHandler {
 
     private NeoForgeEventHandler() {

@@ -30,4 +30,4 @@ stonecutter {
     }
 }
 
-rootProject.name = "mtrmap"
+rootProject.name = "ruochu-better-mtr-map"

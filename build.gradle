@@ -25,14 +25,14 @@ architectury {
     common(platforms as String[])
 }
 
-// Mixin refmap：Loom 给 common 生成的 refmap 名字带 MC 版本号（如 mtrmap-common-1.20.1-refmap.json），
-// 而共享的 mtrmap.mixins.json 里 "refmap" 字段只能写死一个固定名字，所以由各平台脚本的
-// shadowJar 打包时把它改名为 mtrmap-common-refmap.json（见 fabric/forge 的 shadowJar）。
+// Mixin refmap：Loom 给 common 生成的 refmap 名字带 MC 版本号（如 rbmm-common-1.20.1-refmap.json），
+// 而共享的 rbmm.mixins.json 里 "refmap" 字段只能写死一个固定名字，所以由各平台脚本的
+// shadowJar 打包时把它改名为 rbmm-common-refmap.json（见 fabric/forge 的 shadowJar）。
 // NeoForge 1.20.2+ 运行时用官方名、不需要 refmap，故 neoforge 分支不做改名：它的 jar 里
-// 没有 mtrmap-common-refmap.json，Mixin 只会打一条 "could not be read ... can ignore" 警告，
+// 没有 rbmm-common-refmap.json，Mixin 只会打一条 "could not be read ... can ignore" 警告，
 // 不会影响注入（注入直接按官方名匹配）。
 // 注意：不能给 common 设 loom.mixin.defaultRefmapName —— 那会把 1.21.1 的 intermediary
-// refmap 也改名成 mtrmap-common-refmap.json，反而让 neoforge 加载并使用错误的映射。
+// refmap 也改名成 rbmm-common-refmap.json，反而让 neoforge 加载并使用错误的映射。
 
 repositories {
     mavenCentral()
@@ -59,7 +59,7 @@ dependencies {
 
 // mod 的 jar 根目录必须有 pack.mcmeta，否则 Forge 会报
 // "Failed to load a valid ResourcePackInfo" 并丢弃整个 mod 资源包，
-// 结果是语言文件不加载、按钮文字显示成原始 key（key.mtrmap.map_button）。
+// 结果是语言文件不加载、按钮文字显示成原始 key（key.rbmm.map_button）。
 // pack_format 每个 MC 版本不同，所以这里按当前版本填进去；新版本节点要在这里补一条映射。
 def packFormat = ["1.20.1": 15, "1.21.1": 34][mc]
 if (packFormat == null) {
@@ -74,7 +74,7 @@ processResources {
         expand "packFormat": packFormat
     }
     inputs.property "compatibilityLevel", mixinCompat
-    filesMatching("mtrmap.mixins.json") {
+    filesMatching("rbmm.mixins.json") {
         expand "compatibilityLevel": mixinCompat
     }
 }
@@ -117,7 +117,7 @@ tasks.register("buildAndCollect", Copy) {
 // 内嵌 jar 保持原样，所以 Mixin 的注册方式与单独安装该平台的 jar 完全一致：Forge 靠
 // MANIFEST 的 MixinConfigs，NeoForge 靠 neoforge.mods.toml 的 [[mixins]]，Fabric 靠
 // fabric.mod.json 的 mixins。
-// 代价：mod 列表里会多出一个没有实际内容的 "MTR Map Bridge" 外壳条目。
+// 代价：mod 列表里会多出一个没有实际内容的 "Ruochu's better MTR map" 外壳条目。
 //
 // 平台专属的加载器名：1.20.1 是 fabric + forge，1.21.1 是 fabric + neoforge
 def bridgePlatformPaths = platforms.collect { loader -> ":${loader}:${mc}" }
@@ -180,7 +180,7 @@ if (bridgePlatformPaths.size() >= 2 && project.path == ":${mc}") {
             write(new File(dir, "pack.mcmeta"), """{
   "pack": {
     "pack_format": ${packFormat},
-    "description": "MTR Map Bridge"
+    "description": "Ruochu's better MTR map"
   }
 }
 """)
@@ -190,10 +190,10 @@ if (bridgePlatformPaths.size() >= 2 && project.path == ":${mc}") {
   "schemaVersion": 1,
   "id": "${bridgeId}",
   "version": "${modVersion}",
-  "name": "MTR Map Bridge",
-  "description": "双加载器通用外壳：真正的模组是它内嵌的 mtrmap-fabric.jar，由 Fabric Loader 自动加载。",
+  "name": "Ruochu's better MTR map",
+  "description": "双加载器通用外壳：真正的模组是它内嵌的 rbmm-fabric.jar，由 Fabric Loader 自动加载。",
   "authors": [
-    "MTR Map Team"
+    "应若初"
   ],
   "license": "Apache-2.0",
   "environment": "*",
@@ -217,10 +217,10 @@ license = "Apache-2.0"
 [[mods]]
 modId = "${bridgeId}"
 version = "${modVersion}"
-displayName = "MTR Map Bridge"
-authors = "MTR Map Team"
+displayName = "Ruochu's better MTR map"
+authors = "应若初"
 description = '''
-双加载器通用外壳：真正的模组是本 jar 内 META-INF/jars 下的 mtrmap-forge.jar，由 Forge 自带的 JarJar 自动加载。
+双加载器通用外壳：真正的模组是本 jar 内 META-INF/jars 下的 rbmm-forge.jar，由 Forge 自带的 JarJar 自动加载。
 '''
 
 [[dependencies.${bridgeId}]]
@@ -255,10 +255,10 @@ license = "Apache-2.0"
 [[mods]]
 modId = "${bridgeId}"
 version = "${modVersion}"
-displayName = "MTR Map Bridge"
-authors = "MTR Map Team"
+displayName = "Ruochu's better MTR map"
+authors = "应若初"
 description = '''
-双加载器通用外壳：真正的模组是本 jar 内 META-INF/jars 下的 mtrmap-neoforge.jar，由 NeoForge 自带的 JarJar 自动加载。
+双加载器通用外壳：真正的模组是本 jar 内 META-INF/jars 下的 rbmm-neoforge.jar，由 NeoForge 自带的 JarJar 自动加载。
 '''
 
 [[dependencies.${bridgeId}]]

@@ -128,6 +128,8 @@
 			detail_headway_unknown: '班次间隔未知',
 			detail_full_trip: '坐完全程约需 {n} 分钟',
 			detail_lang_title: '切换中英文',
+			egg_menu: '神秘小彩蛋',
+			egg_title: '临玖过于发达',
 		},
 		en: {
 			loading: 'Loading...',
@@ -245,6 +247,8 @@
 			detail_headway_unknown: 'Headway unknown',
 			detail_full_trip: 'Full journey ~{n} min',
 			detail_lang_title: 'Switch language',
+			egg_menu: 'Mystery Egg',
+			egg_title: 'Linjiu is way too developed',
 		}
 	};
 
@@ -368,6 +372,9 @@
 	const userNameEl = document.getElementById('userName');
 	const userMenu = document.getElementById('userMenu');
 	const userTripsBtn = document.getElementById('userTripsBtn');
+	const userEggBtn = document.getElementById('userEggBtn');
+	const eggOverlay = document.getElementById('eggOverlay');
+	const eggTitleEl = document.getElementById('eggTitle');
 	const tripsDialog = document.getElementById('tripsDialog');
 	const tripsOverlay = document.getElementById('tripsOverlay');
 	const tripsTitle = document.getElementById('tripsTitle');
@@ -723,6 +730,7 @@
 		try {
 			const resp = await fetch('/api/data');
 			mapData = await resp.json();
+			updateEggMenu();
 			// 首次拿到数据时，用服务端配置作为车厂开关的初始值
 			if (showDepots === null) {
 				showDepots = mapData.showDepots !== false;
@@ -2326,6 +2334,8 @@
 			if (station.id === routeStartId) return;
 			routeEndId = station.id;
 		} else {
+			// 点重了当前起点/终点时保持现有查询不动，只有点第三站才开新查询
+			if (station.id === routeStartId || station.id === routeEndId) return;
 			routeStartId = station.id;
 			routeEndId = null;
 			routeFromMyLocation = false;
@@ -2515,6 +2525,20 @@
 
 	// 「我的位置」：识别玩家并以最近车站为起点
 	routeMyLocationBtn.addEventListener('click', () => { useMyLocation(); });
+
+	// 彩蛋：服务端检测到「临玖地图」(mtrroutemap) 时，玩家下拉菜单里多一项
+	function updateEggMenu() {
+		if (!userEggBtn) return;
+		userEggBtn.style.display = mapData.ljEasterEgg ? 'block' : 'none';
+		userEggBtn.textContent = t('egg_menu');
+	}
+
+	userEggBtn.addEventListener('click', () => {
+		userMenu.style.display = 'none';
+		eggTitleEl.textContent = t('egg_title');
+		eggOverlay.style.display = 'flex';
+	});
+	eggOverlay.addEventListener('click', () => { eggOverlay.style.display = 'none'; });
 
 	// 左上角用户卡片：点击展开/收起子菜单
 	userCardMain.addEventListener('click', e => {
@@ -2980,7 +3004,7 @@
 			}
 			if (isDragging) {
 				// 指针还没走够距离就仍算「点击」，此时绝不平移
-				if (!dragging && Math.hypot(e.clientX - mouseDownX, e.clientY - mouseDownY) < 4) {
+				if (!dragging && Math.hypot(e.clientX - mouseDownX, e.clientY - mouseDownY) < 8) {
 					return;
 				}
 				dragging = true;
@@ -2998,7 +3022,11 @@
 			const clicked = isDragging && !dragging && e.target === canvas;
 			if (clicked) {
 				const rect = canvas.getBoundingClientRect();
-				const station = getStationAt(e.clientX - rect.left, e.clientY - rect.top);
+				// 换乘站的胶囊很长：松开位置没点中时退回按下位置再判一次
+				let station = getStationAt(e.clientX - rect.left, e.clientY - rect.top);
+				if (!station && (e.clientX !== mouseDownX || e.clientY !== mouseDownY)) {
+					station = getStationAt(mouseDownX - rect.left, mouseDownY - rect.top);
+				}
 				if (routeMode) {
 					handleStationPick(station);
 				} else if (station) {

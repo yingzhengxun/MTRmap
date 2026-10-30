@@ -459,6 +459,8 @@ public class MapDataCollector {
 		}
 		result.add("depots", depotsArray);
 		result.addProperty("showDepots", MtrMapConfig.isShowDepots());
+		// 彩蛋开关：装的是不是「临玖地图」（mod id = mtrroutemap）
+		result.addProperty("ljEasterEgg", com.mtrmap.platform.Platform.isModLoaded("mtrroutemap"));
 
 		// 列车数据
 		if (includeTrains) {

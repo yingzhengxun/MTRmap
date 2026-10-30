@@ -48,7 +48,7 @@ public final class MapExporter {
 	// ===== 落盘位置 =====
 
 	public static Path outputDirectory() {
-		return Platform.getConfigDir().resolve("mtrmap");
+		return Platform.getConfigDir().resolve("rbmm");
 	}
 
 	private static File write(BufferedImage image, String name, String format, int quality) throws Exception {

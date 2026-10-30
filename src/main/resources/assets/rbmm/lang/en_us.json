@@ -1,0 +1,14 @@
+{
+    "key.rbmm.map_button": "Traffic Map",
+    "key.rbmm.open_map": "Open Map Window",
+    "key.rbmm.map_title": "Ruochu's better MTR map",
+    "key.rbmm.toggle_nav": "Collapse / Expand Navigation",
+    "key.rbmm.open_settings": "Open Mod Settings",
+    "key.categories.rbmm": "Ruochu's better MTR map",
+    "key.rbmm.settings_title": "Ruochu's better MTR map - Settings",
+    "key.rbmm.settings_hint": "F6 toggles the map · PgUp collapses the navigation (rebindable)",
+    "key.rbmm.tts_on": "Narrator voice: ON",
+    "key.rbmm.tts_off": "Narrator voice: OFF",
+    "key.rbmm.depot_on": "Show depots: ON",
+    "key.rbmm.depot_off": "Show depots: OFF"
+}

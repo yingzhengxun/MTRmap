@@ -88,9 +88,9 @@ public class MapHttpServer {
 	/** 注册全部静态资源与 API 端点 */
 	private static void registerContexts() {
 		// 静态文件
-		server.createContext("/", new StaticFileHandler("/assets/mtrmap/web/index.html", "html"));
-		server.createContext("/style.css", new StaticFileHandler("/assets/mtrmap/web/style.css", "css"));
-		server.createContext("/map.js", new StaticFileHandler("/assets/mtrmap/web/map.js", "js"));
+		server.createContext("/", new StaticFileHandler("/assets/rbmm/web/index.html", "html"));
+		server.createContext("/style.css", new StaticFileHandler("/assets/rbmm/web/style.css", "css"));
+		server.createContext("/map.js", new StaticFileHandler("/assets/rbmm/web/map.js", "js"));
 
 		// API 端点：取数逻辑与游戏内地图窗口的网络包共用 MapRequestRouter
 		server.createContext("/api/data", exchange ->

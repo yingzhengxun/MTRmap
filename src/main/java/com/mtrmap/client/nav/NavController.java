@@ -44,6 +44,10 @@ public final class NavController {
     private static volatile long finishedAt;
     /** 已经退出导航（Ctrl+X），不再显示面板 */
     private static volatile boolean stopped;
+    /** 导航面板是否被收成胶囊（PgUp 切换） */
+    private static volatile boolean collapsed;
+    /** 已播报的步骤序号，避免同一步重复播报 */
+    private static int narratedStep = -1;
 
     private static volatile boolean threadStarted;
     private static boolean ctrlWasDown;
@@ -74,6 +78,8 @@ public final class NavController {
         stepIndex = 0;
         finished = false;
         stopped = false;
+        collapsed = false;
+        narratedStep = -1;
     }
 
     // ===== 轮询 =====
@@ -104,6 +110,9 @@ public final class NavController {
                                 stopped = false;
                                 taskArrivedAt = System.currentTimeMillis();
                                 stepChangedAt = taskArrivedAt;
+                                collapsed = false;
+                                narratedStep = -1;
+                                narrateTask(parsed);
                             }
                         }
                     }
@@ -177,6 +186,7 @@ public final class NavController {
         if (Math.sqrt(dx * dx + dz * dz) <= ARRIVE_RADIUS) {
             stepIndex++;
             stepChangedAt = System.currentTimeMillis();
+            narrateStep(t, stepIndex);
             if (stepIndex >= t.steps.length) {
                 finish(t);
             }
@@ -194,6 +204,7 @@ public final class NavController {
         }
         finished = true;
         finishedAt = System.currentTimeMillis();
+        NavNarrator.speak("导航完成，已到达" + t.toName + "站");
         postTrip(t, "completed");
     }
 
@@ -248,6 +259,43 @@ public final class NavController {
 
     public static NavTask getTask() {
         return task;
+    }
+
+    /** 导航面板是否处于胶囊（收起）状态 */
+    public static boolean isCollapsed() {
+        return collapsed;
+    }
+
+    /** PgUp：在有导航任务时收起 / 展开面板 */
+    public static void toggleCollapsed() {
+        if (task == null || finished) {
+            return;
+        }
+        collapsed = !collapsed;
+    }
+
+    // ===== 讲述人播报 =====
+
+    /** 新任务到达：播报全程概要 + 第一步 */
+    private static void narrateTask(NavTask t) {
+        NavNarrator.speak("开始导航，从" + t.fromName + "到" + t.toName
+                + "，全程" + Math.round(t.dist) + "米，换乘" + t.transfers + "次");
+        narrateStep(t, 0);
+    }
+
+    /** 播报某一步该怎么做 */
+    private static void narrateStep(NavTask t, int index) {
+        if (index < 0 || index >= t.steps.length || index == narratedStep) {
+            return;
+        }
+        narratedStep = index;
+        NavTask.Step s = t.steps[index];
+        if (s.walk) {
+            NavNarrator.speak("步行" + Math.round(s.distance) + "米，前往" + s.to + "站");
+        } else {
+            NavNarrator.speak("在" + s.from + "站上车，乘坐" + s.line + "，开往" + s.towards
+                    + "方向，" + s.rideCount + "站后到" + s.to + "站");
+        }
     }
 
     public static int getStepIndex() {

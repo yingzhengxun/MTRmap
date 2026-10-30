@@ -99,6 +99,8 @@ public final class MapModel {
 	public boolean showDepots = true;
 	/** 数据是否已成功加载过一次 */
 	public boolean loaded;
+	/** 服务端检测到「临玖地图」(mtrroutemap) 时置 true，用于显示彩蛋入口 */
+	public boolean ljEasterEgg;
 
 	public Station station(long id) {
 		return stationById.get(id);
@@ -118,6 +120,7 @@ public final class MapModel {
 			return model;
 		}
 		model.showDepots = !root.has("showDepots") || root.get("showDepots").getAsBoolean();
+		model.ljEasterEgg = root.has("ljEasterEgg") && root.get("ljEasterEgg").getAsBoolean();
 		model.parseStations(root);
 		model.parseRoutes(root);
 		model.parseDepots(root);
@@ -136,6 +139,7 @@ public final class MapModel {
 		copy.stationById.putAll(stationById);
 		copy.showDepots = showDepots;
 		copy.loaded = loaded;
+		copy.ljEasterEgg = ljEasterEgg;
 		copy.parsePlayers(array);
 		return copy;
 	}

@@ -62,11 +62,11 @@ public class DashboardScreenMixin {
 		};
 		// 1.19.2 还没有 Button.Builder，只能用构造器
 		//? if >=1.20.1 {
-		Button mapButton = Button.builder(translatable("key.mtrmap.map_button"), onPress)
+		Button mapButton = Button.builder(translatable("key.rbmm.map_button"), onPress)
 				.bounds(width - 300, height - 20, 100, 20).build();
 		//?} else {
 		/*Button mapButton = new Button(width - 300, height - 20, 100, 20,
-				translatable("key.mtrmap.map_button"), onPress);
+				translatable("key.rbmm.map_button"), onPress);
 		*///?}
 		//? if >=1.17 {
 		addRenderableWidget(mapButton);

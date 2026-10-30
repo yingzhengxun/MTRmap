@@ -8,13 +8,13 @@ license = "Apache-2.0"
 modId = "${id}"
 version = "${version}"
 displayName = "${name}"
-authors = "MTR Map Team"
+authors = "应若初"
 description = '''
-通过 localhost:1145 显示 Minecraft Transit Railway 的线路地图，包含车站、线路、车厂与玩家位置。
+Ruochu's better MTR map：显示 Minecraft Transit Railway 的线路地图，包含车站、线路、车厂、玩家位置与游戏内导航。
 '''
 
 [[mixins]]
-config = "mtrmap.mixins.json"
+config = "rbmm.mixins.json"
 
 [[dependencies.${id}]]
 modId = "mtr"

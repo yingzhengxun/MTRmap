@@ -3,12 +3,12 @@
   "id": "${id}",
   "version": "${version}",
   "name": "${name}",
-  "description": "通过 localhost:1145 显示 Minecraft Transit Railway 的线路地图，包含车站、线路、车厂与玩家位置。",
+  "description": "Ruochu's better MTR map：显示 Minecraft Transit Railway 的线路地图，包含车站、线路、车厂、玩家位置与游戏内导航。",
   "authors": [
-    "MTR Map Team"
+    "应若初"
   ],
   "license": "Apache-2.0",
-  "icon": "assets/mtrmap/icon.png",
+  "icon": "assets/rbmm/icon.png",
   "environment": "*",
   "entrypoints": {
     "main": [
@@ -19,7 +19,7 @@
     ]
   },
   "mixins": [
-    "mtrmap.mixins.json"
+    "rbmm.mixins.json"
   ],
   "depends": {
     "fabricloader": ">=0.15.11",
