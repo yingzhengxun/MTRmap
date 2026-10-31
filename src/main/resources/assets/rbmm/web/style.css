@@ -88,6 +88,7 @@ body.light-mode {
 /* 毛玻璃：面板半透明 + 背景模糊，圆角与透明度由设置面板的滑块控制 */
 body.glass-mode {
 	--bg-color: #14141c;
+	--glass-blur: 16px;
 	--text-color: #eef0f6;
 	--panel-bg: rgba(16, 16, 30, var(--glass-alpha));
 	--grid-color: rgba(255, 255, 255, 0.06);
@@ -136,8 +137,51 @@ body.glass-mode #detailPanel,
 body.glass-mode .user-menu,
 body.glass-mode #controls button,
 body.glass-mode #fontSelect {
-	backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-	-webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+	/* 透过玻璃看背景：真高斯模糊 + 提高饱和度 */
+	backdrop-filter: blur(var(--glass-blur)) saturate(165%);
+	-webkit-backdrop-filter: blur(var(--glass-blur)) saturate(165%);
+	/* 1px 亮边：模拟玻璃厚度 */
+	border: 1px solid rgba(255, 255, 255, 0.36);
+	/* 悬浮阴影 + 上沿高光 + 内圈折射亮边 */
+	box-shadow:
+		0 10px 30px rgba(0, 0, 0, 0.38),
+		0 2px 8px rgba(0, 0, 0, 0.26),
+		inset 0 1px 0 rgba(255, 255, 255, 0.45),
+		inset 0 -1px 0 rgba(255, 255, 255, 0.08),
+		inset 1px 0 0 rgba(255, 255, 255, 0.12);
+	/* 表面：左上角柔和高光（折射感）+ 缓慢流动的冷色渐变 + 细微噪点 */
+	background-image:
+		linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.06) 24%, rgba(255, 255, 255, 0) 52%),
+		linear-gradient(315deg, rgba(122, 190, 255, 0.16) 0%, rgba(168, 132, 255, 0.13) 100%),
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.16'/%3E%3C/svg%3E");
+	background-size: 260% 260%, 220% 220%, 140px 140px;
+	background-repeat: no-repeat, no-repeat, repeat;
+	animation: glass-flow 22s ease-in-out infinite alternate;
+	transition: background-color 0.3s, border-color 0.3s;
+}
+
+/* 液态感：两层渐变缓慢错位流动 */
+@keyframes glass-flow {
+	0% { background-position: 0% 0%, 100% 100%, 0 0; }
+	50% { background-position: 100% 45%, 30% 70%, 12px 8px; }
+	100% { background-position: 55% 100%, 0% 0%, 24px 16px; }
+}
+
+/* 工具栏按钮的玻璃块：高光弱一点，避免一排按钮过亮 */
+body.glass-mode #controls button,
+body.glass-mode #fontSelect {
+	background-image:
+		linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.04) 30%, rgba(255, 255, 255, 0) 60%),
+		linear-gradient(315deg, rgba(122, 190, 255, 0.14) 0%, rgba(168, 132, 255, 0.1) 100%);
+}
+
+/* 悬停时玻璃更亮，边缘高光更强 */
+body.glass-mode #controls button:hover {
+	border-color: rgba(255, 255, 255, 0.55);
+	box-shadow:
+		0 12px 34px rgba(0, 0, 0, 0.42),
+		inset 0 1px 0 rgba(255, 255, 255, 0.6),
+		inset 0 -1px 0 rgba(255, 255, 255, 0.12);
 }
 
 html, body {

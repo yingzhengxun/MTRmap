@@ -98,6 +98,20 @@ public final class GuiSink {
 		gg.blit(texture, Math.round(x), Math.round(y), iw, ih, 0f, 0f, iw, ih, iw, ih);
 	}
 
+	/**
+	 * 贴纹理中的一块区域（毛玻璃背景取样用）。
+	 * {@code u}/{@code v}/{@code uw}/{@code vh} 都是纹理像素坐标。
+	 */
+	public void blitRegion(ResourceLocation texture, int x, int y, int w, int h,
+			float u, float v, int uw, int vh, int texW, int texH) {
+		gg.blit(texture, x, y, w, h, u, v, uw, vh, texW, texH);
+	}
+
+	/** 竖向渐变填充：{@code topColor} 在上，{@code bottomColor} 在下 */
+	public void gradient(int x1, int y1, int x2, int y2, int topColor, int bottomColor) {
+		gg.fillGradient(x1, y1, x2, y2, topColor, bottomColor);
+	}
+
 	/** 半透明遮罩：给整块区域压一层暗色（模态弹窗用） */
 	public void dim(int width, int height, int color) {
 		gg.fill(0, 0, width, height, color);
