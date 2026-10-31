@@ -67,7 +67,7 @@
 			<button id="controlsToggle" title="展开/折叠工具栏">▾</button>
 			<div id="controlsBody">
 				<button id="routeBtn" title="路径查询">⇄</button>
-				<button id="themeToggle" title="夜间模式">☾</button>
+				<button id="themeToggle" title="地图样式">☾</button>
 				<button id="langToggle" title="English">EN</button>
 				<button id="exportBtn" title="导出图片">↓</button>
 				<button id="depotBtn" title="显示/隐藏车厂">▣</button>
@@ -92,6 +92,28 @@
 					<span id="qualityDisplay">92%</span>
 				</div>
 				<button class="export-cancel" id="exportCancel">取消</button>
+			</div>
+		</div>
+		<div id="styleDialog" style="display:none">
+			<div class="export-overlay" id="styleOverlay"></div>
+			<div class="export-panel style-panel">
+				<div class="export-title" id="styleTitle">地图样式</div>
+				<div class="style-modes">
+					<button class="export-fmt-btn style-mode-btn" data-theme="light" title="浅色">☀</button>
+					<button class="export-fmt-btn style-mode-btn" data-theme="dark" title="深色">☾</button>
+					<button class="export-fmt-btn style-mode-btn" data-theme="glass" title="毛玻璃">▣</button>
+				</div>
+				<div class="style-slider-row">
+					<label id="styleRadiusLabel">毛玻璃圆角</label>
+					<input type="range" id="styleRadius" min="0" max="24" value="12">
+					<span id="styleRadiusValue">12</span>
+				</div>
+				<div class="style-slider-row">
+					<label id="styleOpacityLabel">毛玻璃透明度</label>
+					<input type="range" id="styleOpacity" min="20" max="100" value="60">
+					<span id="styleOpacityValue">60%</span>
+				</div>
+				<button class="export-cancel" id="styleClose">关闭</button>
 			</div>
 		</div>
 		<div id="tripsDialog" style="display:none">

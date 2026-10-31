@@ -36,6 +36,15 @@
 			reset_view: '重置视图',
 			dark_mode: '夜间模式',
 			light_mode: '日间模式',
+			style_btn_title: '地图样式',
+			style_title: '地图样式',
+			style_light: '浅色',
+			style_dark: '深色',
+			style_glass: '毛玻璃',
+			style_radius: '毛玻璃圆角',
+			style_opacity: '毛玻璃透明度',
+			style_close: '关闭',
+			style_glass_only: '毛玻璃模式下可调',
 			btn_lang: 'EN',
 			btn_lang_title: 'English',
 			page_title: 'MTR 地图',
@@ -158,6 +167,15 @@
 			reset_view: 'Reset View',
 			dark_mode: 'Dark Mode',
 			light_mode: 'Light Mode',
+			style_btn_title: 'Map style',
+			style_title: 'Map style',
+			style_light: 'Light',
+			style_dark: 'Dark',
+			style_glass: 'Glass',
+			style_radius: 'Glass corner radius',
+			style_opacity: 'Glass opacity',
+			style_close: 'Close',
+			style_glass_only: 'Adjustable in Glass mode',
 			btn_lang: '中',
 			btn_lang_title: '中文',
 			page_title: 'MTR Map',
@@ -268,7 +286,11 @@
 	// ===== 状态 =====
 	let currentLang = 'zh';
 	let currentFont = FONTS[0].key;
-	let isDarkMode = true;
+	// 地图样式：light / dark / glass；毛玻璃圆角与透明度可按用户调整
+	let themeMode = 'dark';
+	let glassRadius = 12;
+	let glassOpacity = 60;
+	const STYLE_STORAGE_KEY = 'rbmm_map_style';
 	let scale = 1;
 	let offsetX = 0;
 	let offsetY = 0;
@@ -393,6 +415,18 @@
 	const ticketSave = document.getElementById('ticketSave');
 	const ticketPrint = document.getElementById('ticketPrint');
 	const ticketCancel = document.getElementById('ticketCancel');
+	// 地图样式设置
+	const styleDialog = document.getElementById('styleDialog');
+	const styleOverlay = document.getElementById('styleOverlay');
+	const styleTitle = document.getElementById('styleTitle');
+	const styleClose = document.getElementById('styleClose');
+	const styleRadius = document.getElementById('styleRadius');
+	const styleRadiusValue = document.getElementById('styleRadiusValue');
+	const styleRadiusLabel = document.getElementById('styleRadiusLabel');
+	const styleOpacity = document.getElementById('styleOpacity');
+	const styleOpacityValue = document.getElementById('styleOpacityValue');
+	const styleOpacityLabel = document.getElementById('styleOpacityLabel');
+	const styleModeBtns = Array.from(document.querySelectorAll('.style-mode-btn'));
 	// 搜索 / 详情侧边栏
 	const searchBox = document.getElementById('searchBox');
 	const searchType = document.getElementById('searchType');
@@ -405,12 +439,79 @@
 	const detailCloseBtn = document.getElementById('detailCloseBtn');
 	const lineListEl = document.getElementById('lineList');
 
+	function isDarkStyle() {
+		return themeMode !== 'light';
+	}
+
+	function themeIcon() {
+		if (themeMode === 'light') return '☀';
+		return themeMode === 'glass' ? '▣' : '☾';
+	}
+
 	function applyTheme() {
-		document.body.classList.toggle('light-mode', !isDarkMode);
-		themeBtn.textContent = isDarkMode ? '☾' : '☀';
-		themeBtn.title = t(isDarkMode ? 'dark_mode' : 'light_mode');
+		document.body.classList.toggle('light-mode', themeMode === 'light');
+		document.body.classList.toggle('glass-mode', themeMode === 'glass');
+		document.documentElement.style.setProperty('--glass-radius', glassRadius + 'px');
+		document.documentElement.style.setProperty('--glass-alpha', (glassOpacity / 100).toFixed(2));
+		themeBtn.textContent = themeIcon();
+		themeBtn.title = t('style_btn_title');
+		updateStyleDialog();
 		refreshUiColors();
 		render();
+	}
+
+	/** 读取上次选择的地图样式（网页端独立保存，不影响游戏内配置） */
+	function loadStyleSettings() {
+		try {
+			const raw = localStorage.getItem(STYLE_STORAGE_KEY);
+			if (!raw) return;
+			const saved = JSON.parse(raw);
+			if (saved && ['light', 'dark', 'glass'].indexOf(saved.theme) !== -1) {
+				themeMode = saved.theme;
+			}
+			if (saved && Number.isFinite(saved.radius)) {
+				glassRadius = Math.max(0, Math.min(24, saved.radius));
+			}
+			if (saved && Number.isFinite(saved.opacity)) {
+				glassOpacity = Math.max(20, Math.min(100, saved.opacity));
+			}
+		} catch (e) {
+			// 存储不可用时就用默认样式
+		}
+	}
+
+	function saveStyleSettings() {
+		try {
+			localStorage.setItem(STYLE_STORAGE_KEY, JSON.stringify({
+				theme: themeMode,
+				radius: glassRadius,
+				opacity: glassOpacity
+			}));
+		} catch (e) {
+			// 忽略：无痕模式等情况下 localStorage 可能不可用
+		}
+	}
+
+	function updateStyleDialog() {
+		styleTitle.textContent = t('style_title');
+		styleClose.textContent = t('style_close');
+		const labels = { light: 'style_light', dark: 'style_dark', glass: 'style_glass' };
+		styleModeBtns.forEach(btn => {
+			const mode = btn.dataset.theme;
+			btn.title = t(labels[mode]);
+			btn.classList.toggle('active', themeMode === mode);
+		});
+		styleRadiusLabel.textContent = t('style_radius');
+		styleOpacityLabel.textContent = t('style_opacity');
+		styleRadius.value = glassRadius;
+		styleRadiusValue.textContent = glassRadius;
+		styleOpacity.value = glassOpacity;
+		styleOpacityValue.textContent = glassOpacity + '%';
+		const glassOnly = themeMode !== 'glass';
+		styleRadius.disabled = glassOnly;
+		styleOpacity.disabled = glassOnly;
+		styleRadius.title = glassOnly ? t('style_glass_only') : '';
+		styleOpacity.title = glassOnly ? t('style_glass_only') : '';
 	}
 
 	function applyLang() {
@@ -419,7 +520,8 @@
 		document.title = t('page_title');
 		langBtn.textContent = t('btn_lang');
 		langBtn.title = t('btn_lang_title');
-		themeBtn.title = t(isDarkMode ? 'dark_mode' : 'light_mode');
+		themeBtn.title = t('style_btn_title');
+		updateStyleDialog();
 		document.getElementById('zoomIn').title = t('zoom_in');
 		document.getElementById('zoomOut').title = t('zoom_out');
 		document.getElementById('reset').title = t('reset_view');
@@ -443,7 +545,35 @@
 	}
 
 	themeBtn.addEventListener('click', () => {
-		isDarkMode = !isDarkMode;
+		updateStyleDialog();
+		styleDialog.style.display = 'flex';
+	});
+
+	styleOverlay.addEventListener('click', () => {
+		styleDialog.style.display = 'none';
+	});
+
+	styleClose.addEventListener('click', () => {
+		styleDialog.style.display = 'none';
+	});
+
+	styleModeBtns.forEach(btn => {
+		btn.addEventListener('click', () => {
+			themeMode = btn.dataset.theme;
+			saveStyleSettings();
+			applyTheme();
+		});
+	});
+
+	styleRadius.addEventListener('input', () => {
+		glassRadius = Number(styleRadius.value);
+		saveStyleSettings();
+		applyTheme();
+	});
+
+	styleOpacity.addEventListener('input', () => {
+		glassOpacity = Number(styleOpacity.value);
+		saveStyleSettings();
 		applyTheme();
 	});
 
@@ -578,7 +708,7 @@
 		canvas.width = expW;
 		canvas.height = expH;
 
-		// 导出时强制使用当前主题（跟随 isDarkMode）
+		// 导出时强制使用当前主题（跟随 isDarkStyle()）
 		render();
 
 		// 导出为 blob
@@ -785,7 +915,7 @@
 	}
 
 	function drawBackground() {
-		const gridColor = isDarkMode ? 'rgba(60, 60, 100, 0.2)' : 'rgba(0, 0, 0, 0.08)';
+		const gridColor = isDarkStyle() ? 'rgba(60, 60, 100, 0.2)' : 'rgba(0, 0, 0, 0.08)';
 		ctx.strokeStyle = gridColor;
 		ctx.lineWidth = 1;
 		const gridSize = 64;
@@ -927,7 +1057,7 @@
 		const transSize = 9;
 		const gap = 4;
 		const pad = 2;
-		ctx.fillStyle = isDarkMode ? '#ffffff' : '#222233';
+		ctx.fillStyle = isDarkStyle() ? '#ffffff' : '#222233';
 		ctx.textAlign = 'center';
 		ctx.textBaseline = 'bottom';
 
@@ -991,7 +1121,7 @@
 				const cx = (p1.x + p2.x) / 2;
 				const cy = (p1.y + p2.y) / 2;
 				const n = splitName(depot.name);
-				ctx.fillStyle = isDarkMode ? '#ffffff' : '#222233';
+				ctx.fillStyle = isDarkStyle() ? '#ffffff' : '#222233';
 				ctx.textAlign = 'center';
 				ctx.font = canvasFont(11);
 				ctx.textBaseline = 'middle';
@@ -3086,7 +3216,6 @@
 		document.title = t('page_title');
 		langBtn.textContent = t('btn_lang');
 		langBtn.title = t('btn_lang_title');
-		themeBtn.title = t('dark_mode');
 		document.getElementById('zoomIn').title = t('zoom_in');
 		document.getElementById('zoomOut').title = t('zoom_out');
 		document.getElementById('reset').title = t('reset_view');
@@ -3100,6 +3229,8 @@
 		updateLegend();
 		statusEl.textContent = t('loading');
 		refreshUiColors();
+		loadStyleSettings();
+		applyTheme();
 
 		resizeCanvas();
 		setupInteraction();

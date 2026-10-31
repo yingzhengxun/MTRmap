@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mtrmap.client.render.GuiSink;
+import com.mtrmap.config.MtrMapConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -50,7 +51,6 @@ public class MapScreen extends Screen {
 	// ===== 界面状态 =====
 	private boolean showDepots = true;
 	private boolean depotsInitialized;
-	private boolean dark = true;
 	private boolean english;
 	/** 搜索：0 = 车站，1 = 线路 */
 	private boolean searchRouteMode;
@@ -325,7 +325,7 @@ public class MapScreen extends Screen {
 
 	/** 纯色底：没有底图，线网直接画在上面 */
 	private void drawBackground(GuiSink sink) {
-		sink.fill(0, 0, width, height, dark ? 0xFF14141C : 0xFFF2F2F6);
+		sink.fill(0, 0, width, height, isLightStyle() ? 0xFFF2F2F6 : 0xFF14141C);
 	}
 	// ===== 线网 =====
 
@@ -597,13 +597,13 @@ public class MapScreen extends Screen {
 		// 搜索框
 		int typeW = 44;
 		panel(sink, x, y, w, 20);
-		sink.fill(x + 2, y + 2, x + 2 + typeW, y + 18, dark ? 0xFF2A2A3C : 0xFFE4E4EC);
+		uiFill(sink, x + 2, y + 2, x + 2 + typeW, y + 18, surfaceColor(0xFF2A2A3C, 0xFFE4E4EC));
 		sink.text(font, searchRouteMode ? s("线路", "Line") : s("车站", "Station"),
 				x + 2 + typeW / 2f, y + 6, textColor(), false);
 		int inputX = x + 2 + typeW + 2;
 		int inputW = w - (inputX - x) - 2;
 		if (searchFocused) {
-			border(sink, inputX, y + 2, inputW, 16, 0xFF7EC8E3);
+			uiBorder(sink, inputX, y + 2, inputW, 16, 0xFF7EC8E3);
 		}
 		String shown = searchText.isEmpty() && !searchFocused
 				? s("搜索车站", "Search stations")
@@ -625,7 +625,7 @@ public class MapScreen extends Screen {
 			for (int i = 0; i < rows; i++) {
 				int ry = y + i * ROW;
 				if (i == searchIndex) {
-					sink.fill(x + 1, ry + 1, x + w - 1, ry + ROW - 1, dark ? 0xFF35405C : 0xFFD6E4FF);
+					uiFill(sink, x + 1, ry + 1, x + w - 1, ry + ROW - 1, surfaceColor(0xFF35405C, 0xFFD6E4FF));
 				}
 				sink.textLeft(font, hitLabel(searchHits.get(i)), x + 4, ry + 5, textColor(), false);
 			}
@@ -735,7 +735,7 @@ public class MapScreen extends Screen {
 		int y = (height - totalH) / 2;
 		buttons.add(new Btn("route", x, y, s("⇄", "⇄"), s("路径查询", "Route planner"), routeMode));
 		y += TOOL_W + gap;
-		buttons.add(new Btn("theme", x, y, dark ? "☾" : "☀", s("夜间模式", "Night mode"), false));
+		buttons.add(new Btn("theme", x, y, themeIcon(), s("地图样式：" + themeName(), "Map style: " + themeName()), false));
 		y += TOOL_W + gap;
 		buttons.add(new Btn("lang", x, y, "EN", s("English", "中文"), english));
 		y += TOOL_W + gap;
@@ -766,9 +766,10 @@ public class MapScreen extends Screen {
 	private void drawToolbar(GuiSink sink, int mouseX, int mouseY) {
 		for (Btn button : toolbarButtons()) {
 			boolean hover = button.contains(mouseX, mouseY);
-			int bg = button.active ? 0xFF3B5180 : (hover ? 0xFF35405C : (dark ? 0xE61E1E2E : 0xF2FFFFFF));
-			sink.fill(button.x, button.y, button.x + TOOL_W, button.y + TOOL_W, bg);
-			border(sink, button.x, button.y, TOOL_W, TOOL_W, dark ? 0xFF3A3A4A : 0xFFBBBBCC);
+			int bg = button.active ? 0xFF3B5180 : surfaceColor(hover ? 0xFF35405C : 0xE61E1E2E,
+					hover ? 0xFF35405C : 0xF2FFFFFF);
+			uiFill(sink, button.x, button.y, button.x + TOOL_W, button.y + TOOL_W, bg);
+			uiBorder(sink, button.x, button.y, TOOL_W, TOOL_W, themeColor(0xFF3A3A4A, 0xFFBBBBCC));
 			sink.text(font, button.label, button.x + TOOL_W / 2f, button.y + (TOOL_W - 8) / 2f, textColor(), false);
 			if (hover && hoverText == null) {
 				hoverText = button.tooltip;
@@ -894,9 +895,9 @@ public class MapScreen extends Screen {
 			int bx = x + 6 + i * (bw + 3);
 			boolean enabled = !"go".equals(ids[i]) || (routeStartId >= 0 && routeEndId >= 0);
 			int bg = "go".equals(ids[i]) && routeStartId >= 0 && routeEndId >= 0
-					? 0xFF3B6FD4 : (dark ? 0xFF2A2A3C : 0xFFE4E4EC);
-			sink.fill(bx, by, bx + bw, by + bh, bg);
-			border(sink, bx, by, bw, bh, dark ? 0xFF3A3A4A : 0xFFBBBBCC);
+					? 0xFF3B6FD4 : surfaceColor(0xFF2A2A3C, 0xFFE4E4EC);
+			uiFill(sink, bx, by, bx + bw, by + bh, bg);
+			uiBorder(sink, bx, by, bw, bh, themeColor(0xFF3A3A4A, 0xFFBBBBCC));
 			sink.text(font, fit(labels[i], bw - 4), bx + bw / 2f, by + 3, enabled ? textColor() : dimColor(), false);
 		}
 		int cy = by + 18;
@@ -912,7 +913,8 @@ public class MapScreen extends Screen {
 		for (int i = 0; i < routeOptions.size(); i++) {
 			int tx = x + 6 + i * tabW;
 			boolean active = i == Math.min(activeRouteTab, routeOptions.size() - 1);
-			sink.fill(tx, cy, tx + tabW - 2, cy + 11, active ? 0xFF3B5180 : (dark ? 0xFF2A2A3C : 0xFFE4E4EC));
+			uiFill(sink, tx, cy, tx + tabW - 2, cy + 11,
+					active ? 0xFF3B5180 : surfaceColor(0xFF2A2A3C, 0xFFE4E4EC));
 			sink.text(font, routeOptions.get(i).mode.label, tx + (tabW - 2) / 2f, cy + 1, textColor(), false);
 		}
 		cy += 13;
@@ -997,7 +999,8 @@ public class MapScreen extends Screen {
 				JsonObject trip = trips.get(i).getAsJsonObject();
 				int ry = cy + i * TRIPS_ROW_H;
 				if (i % 2 == 1) {
-					sink.fill(x + 2, ry, x + TRIPS_W - 2, ry + TRIPS_ROW_H - 2, dark ? 0x33000000 : 0x11000000);
+					uiFill(sink, x + 2, ry, x + TRIPS_W - 2, ry + TRIPS_ROW_H - 2,
+							surfaceColor(0x33000000, 0x11000000));
 				}
 				String status = "completed".equals(str(trip, "status"))
 						? s("已完成", "Completed") : s("已停止", "Stopped");
@@ -1007,15 +1010,18 @@ public class MapScreen extends Screen {
 						+ s(" · 换乘 ", " · transfers ") + (int) num(trip, "transfers");
 				sink.textLeft(font, fit(meta, TRIPS_W - 104), x + 8, ry + 16, dimColor(), false);
 				// 票根（只保存，不打印）
-				sink.fill(x + TRIPS_W - 86, ry + 6, x + TRIPS_W - 48, ry + 24, dark ? 0xFF2A3A4A : 0xFFD6E4F0);
+				uiFill(sink, x + TRIPS_W - 86, ry + 6, x + TRIPS_W - 48, ry + 24,
+						surfaceColor(0xFF2A3A4A, 0xFFD6E4F0));
 				sink.text(font, s("票根", "Ticket"), x + TRIPS_W - 67f, ry + 11, textColor(), false);
-				sink.fill(x + TRIPS_W - 44, ry + 6, x + TRIPS_W - 6, ry + 24, dark ? 0xFF4A2A2A : 0xFFF0D6D6);
+				uiFill(sink, x + TRIPS_W - 44, ry + 6, x + TRIPS_W - 6, ry + 24,
+						surfaceColor(0xFF4A2A2A, 0xFFF0D6D6));
 				sink.text(font, s("删除", "Del"), x + TRIPS_W - 25f, ry + 11, textColor(), false);
 			}
 		}
 		int by = y + h - 22;
-		sink.fill(x + TRIPS_W / 2 - 40, by, x + TRIPS_W / 2 + 40, by + 16, dark ? 0xFF2A2A3C : 0xFFE4E4EC);
-		border(sink, x + TRIPS_W / 2 - 40, by, 80, 16, dark ? 0xFF3A3A4A : 0xFFBBBBCC);
+		uiFill(sink, x + TRIPS_W / 2 - 40, by, x + TRIPS_W / 2 + 40, by + 16,
+				surfaceColor(0xFF2A2A3C, 0xFFE4E4EC));
+		uiBorder(sink, x + TRIPS_W / 2 - 40, by, 80, 16, themeColor(0xFF3A3A4A, 0xFFBBBBCC));
 		sink.text(font, s("关闭", "Close"), x + TRIPS_W / 2f, by + 4, textColor(), false);
 	}
 
@@ -1176,8 +1182,9 @@ public class MapScreen extends Screen {
 		for (int i = 0; i < formats.length; i++) {
 			boolean active = formats[i].equals(exportFormat);
 			int bx = exportFormatButtonX(i);
-			sink.fill(bx, by, bx + 60, by + 20, active ? 0xFF3B5180 : (dark ? 0xFF2A2A3C : 0xFFE4E4EC));
-			border(sink, bx, by, 60, 20, dark ? 0xFF3A3A4A : 0xFFBBBBCC);
+			uiFill(sink, bx, by, bx + 60, by + 20,
+					active ? 0xFF3B5180 : surfaceColor(0xFF2A2A3C, 0xFFE4E4EC));
+			uiBorder(sink, bx, by, 60, 20, themeColor(0xFF3A3A4A, 0xFFBBBBCC));
 			sink.text(font, labels[i], bx + 30f, by + 6, textColor(), false);
 		}
 
@@ -1186,7 +1193,7 @@ public class MapScreen extends Screen {
 			sink.textLeft(font, s("质量:", "Quality:"), x + 8, qy + 3, dimColor(), false);
 			int trackX = x + 54;
 			int trackW = 122;
-			sink.fill(trackX, qy + 6, trackX + trackW, qy + 10, dark ? 0xFF2A2A3C : 0xFFD8D8E0);
+			uiFill(sink, trackX, qy + 6, trackX + trackW, qy + 10, surfaceColor(0xFF2A2A3C, 0xFFD8D8E0));
 			int filled = (int) Math.round(trackW * (exportQuality - 1) / 99.0);
 			sink.fill(trackX, qy + 6, trackX + filled, qy + 10, 0xFF3B6FD4);
 			sink.fill(trackX + filled - 1, qy + 3, trackX + filled + 1, qy + 13, 0xFFFFFFFF);
@@ -1195,8 +1202,8 @@ public class MapScreen extends Screen {
 
 		int cy = y + h - 24;
 		int cancelX = x + EXPORT_W / 2 - 40;
-		sink.fill(cancelX, cy, cancelX + 80, cy + 18, dark ? 0xFF2A2A3C : 0xFFE4E4EC);
-		border(sink, cancelX, cy, 80, 18, dark ? 0xFF3A3A4A : 0xFFBBBBCC);
+		uiFill(sink, cancelX, cy, cancelX + 80, cy + 18, surfaceColor(0xFF2A2A3C, 0xFFE4E4EC));
+		uiBorder(sink, cancelX, cy, 80, 18, themeColor(0xFF3A3A4A, 0xFFBBBBCC));
 		sink.text(font, s("取消", "Cancel"), cancelX + 40f, cy + 5, textColor(), false);
 	}
 
@@ -1256,7 +1263,7 @@ public class MapScreen extends Screen {
 		}
 		final MapModel model = MapDataClient.model();
 		final boolean depots = showDepots;
-		final boolean darkMode = dark;
+		final boolean darkMode = !isLightStyle();
 		final boolean en = english;
 		final String format = exportFormat;
 		final int quality = exportQuality;
@@ -1969,7 +1976,7 @@ public class MapScreen extends Screen {
 				setRouteMode(!routeMode);
 				break;
 			case "theme":
-				dark = !dark;
+				cycleTheme();
 				break;
 			case "lang":
 				english = !english;
@@ -2032,8 +2039,104 @@ public class MapScreen extends Screen {
 	// ===== 绘制小工具 =====
 
 	private void panel(GuiSink sink, int x, int y, int w, int h) {
-		sink.fill(x, y, x + w, y + h, dark ? 0xE61E1E2E : 0xF2FFFFFF);
-		border(sink, x, y, w, h, dark ? 0xFF3A3A4A : 0xFFBBBBCC);
+		uiFill(sink, x, y, x + w, y + h, surfaceColor(0xE61E1E2E, 0xF2FFFFFF));
+		uiBorder(sink, x, y, w, h, themeColor(0xFF3A3A4A, 0xFFBBBBCC));
+	}
+
+	// ===== 主题（浅色 / 深色 / 毛玻璃）=====
+
+	private boolean isLightStyle() {
+		return "light".equals(MtrMapConfig.getMapTheme());
+	}
+
+	private boolean isGlassStyle() {
+		return "glass".equals(MtrMapConfig.getMapTheme());
+	}
+
+	/** 同一控件在深色与浅色下的固定配色；毛玻璃沿用深色 */
+	private int themeColor(int darkColor, int lightColor) {
+		return isLightStyle() ? lightColor : darkColor;
+	}
+
+	/** 填充色：毛玻璃时改成按配置的透明度半透明 */
+	private int surfaceColor(int darkColor, int lightColor) {
+		int base = themeColor(darkColor, lightColor);
+		if (!isGlassStyle()) {
+			return base;
+		}
+		int alpha = (int) Math.round(MtrMapConfig.getGlassOpacity() * 2.55);
+		return (base & 0x00FFFFFF) | (alpha << 24);
+	}
+
+	/** 圆角：网页端以像素配置，游戏内按 GUI 像素折半 */
+	private int glassRadius() {
+		return MtrMapConfig.getGlassRadius() / 2;
+	}
+
+	private String themeName() {
+		switch (MtrMapConfig.getMapTheme()) {
+			case "light":
+				return s("浅色", "Light");
+			case "glass":
+				return s("毛玻璃", "Glass");
+			default:
+				return s("深色", "Dark");
+		}
+	}
+
+	private String themeIcon() {
+		switch (MtrMapConfig.getMapTheme()) {
+			case "light":
+				return "☀";
+			case "glass":
+				return "▣";
+			default:
+				return "☾";
+		}
+	}
+
+	private void cycleTheme() {
+		String current = MtrMapConfig.getMapTheme();
+		String next = "dark".equals(current) ? "light" : ("light".equals(current) ? "glass" : "dark");
+		MtrMapConfig.setMapTheme(next);
+		MtrMapConfig.save();
+	}
+
+	/** 带圆角的面填充（毛玻璃模式；其他模式就是普通矩形） */
+	private void uiFill(GuiSink sink, int x, int y, int x2, int y2, int color) {
+		int w = x2 - x;
+		int h = y2 - y;
+		int r = isGlassStyle() ? Math.min(glassRadius(), Math.min(w, h) / 2) : 0;
+		if (r <= 0) {
+			sink.fill(x, y, x2, y2, color);
+			return;
+		}
+		for (int row = 0; row < h; row++) {
+			int inset = 0;
+			int cornerRow = row < r ? row : (row >= h - r ? h - 1 - row : -1);
+			if (cornerRow >= 0 && cornerRow < r) {
+				double dy = r - cornerRow - 0.5;
+				inset = r - (int) Math.round(Math.sqrt(Math.max(0, r * (double) r - dy * dy)));
+			}
+			sink.fill(x + inset, y + row, x2 - inset, y + row + 1, color);
+		}
+	}
+
+	/** 带圆角的边框（毛玻璃模式），圆角以外的 UI 边框也走这里 */
+	private void uiBorder(GuiSink sink, int x, int y, int w, int h, int color) {
+		int r = isGlassStyle() ? Math.min(glassRadius(), Math.min(w, h) / 2) : 0;
+		if (r <= 0) {
+			border(sink, x, y, w, h, color);
+			return;
+		}
+		sink.fill(x + r, y, x + w - r, y + 1, color);
+		sink.fill(x + r, y + h - 1, x + w - r, y + h, color);
+		sink.fill(x, y + r, x + 1, y + h - r, color);
+		sink.fill(x + w - 1, y + r, x + w, y + h - r, color);
+		strokeArc(sink, x + r, y + r, r, Math.PI, Math.PI * 1.5, color, 1);
+		strokeArc(sink, x + w - r, y + r, r, Math.PI * 1.5, Math.PI * 2, color, 1);
+		strokeArc(sink, x + r, y + h - r, r, Math.PI / 2, Math.PI, color, 1);
+		strokeArc(sink, x + w - r, y + h - r, r, 0, Math.PI / 2, color, 1);
 	}
 
 	private void border(GuiSink sink, int x, int y, int w, int h, int color) {
@@ -2184,11 +2287,11 @@ public class MapScreen extends Screen {
 	}
 
 	private int textColor() {
-		return dark ? 0xFFECEFF4 : 0xFF222233;
+		return isLightStyle() ? 0xFF222233 : 0xFFECEFF4;
 	}
 
 	private int dimColor() {
-		return dark ? 0xFFB0B0BE : 0xFF666677;
+		return isLightStyle() ? 0xFF666677 : 0xFFB0B0BE;
 	}
 
 	private int alpha(int argb, float a) {

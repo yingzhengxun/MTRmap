@@ -5,6 +5,9 @@
 }
 
 :root {
+	--glass-radius: 12px;
+	--glass-alpha: 0.6;
+	--glass-blur: 12px;
 	--bg-color: #1a1a2e;
 	--text-color: #e0e0e0;
 	--panel-bg: rgba(20, 20, 40, 0.85);
@@ -80,6 +83,61 @@ body.light-mode {
 	--route-start-color: #1f9d55;
 	--route-end-color: #d63a3a;
 	--route-walk-color: #7a8290;
+}
+
+/* 毛玻璃：面板半透明 + 背景模糊，圆角与透明度由设置面板的滑块控制 */
+body.glass-mode {
+	--bg-color: #14141c;
+	--text-color: #eef0f6;
+	--panel-bg: rgba(16, 16, 30, var(--glass-alpha));
+	--grid-color: rgba(255, 255, 255, 0.06);
+	--border-color: rgba(255, 255, 255, 0.28);
+	--tooltip-bg: rgba(18, 18, 38, calc(var(--glass-alpha) + 0.2));
+	--tooltip-border: rgba(255, 255, 255, 0.35);
+	--button-bg: rgba(40, 40, 65, calc(var(--glass-alpha) + 0.08));
+	--button-hover: rgba(80, 80, 130, calc(var(--glass-alpha) + 0.14));
+	--button-color: #eef0f6;
+	--status-color: #9fd8ee;
+	--label-color: #b8bcc9;
+	--tt-title-color: #ffffff;
+	--legend-item-color: #eef0f6;
+	--route-card-bg: rgba(255, 255, 255, 0.08);
+	--route-node-bg: #ffffff;
+}
+
+body.glass-mode button,
+body.glass-mode select,
+body.glass-mode input,
+body.glass-mode #searchBox,
+body.glass-mode #searchResults,
+body.glass-mode #infoPanel,
+body.glass-mode #lineList,
+body.glass-mode #tooltip,
+body.glass-mode .export-panel,
+body.glass-mode #routePanel,
+body.glass-mode #detailPanel,
+body.glass-mode .user-card-main,
+body.glass-mode .user-menu,
+body.glass-mode .search-item,
+body.glass-mode .trip-item,
+body.glass-mode .route-summary-item,
+body.glass-mode .detail-headway {
+	border-radius: var(--glass-radius);
+}
+
+body.glass-mode #searchBox,
+body.glass-mode #searchResults,
+body.glass-mode #infoPanel,
+body.glass-mode #lineList,
+body.glass-mode #tooltip,
+body.glass-mode .export-panel,
+body.glass-mode #routePanel,
+body.glass-mode #detailPanel,
+body.glass-mode .user-menu,
+body.glass-mode #controls button,
+body.glass-mode #fontSelect {
+	backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+	-webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
 }
 
 html, body {
@@ -470,6 +528,7 @@ html, body {
 
 /* ===== 导出对话框 ===== */
 #exportDialog,
+#styleDialog,
 #tripsDialog,
 #confirmDialog,
 #ticketDialog {
@@ -566,6 +625,57 @@ html, body {
 
 .export-cancel:hover {
 	background: var(--button-hover);
+}
+
+/* ===== 地图样式设置 ===== */
+.style-panel {
+	min-width: 300px;
+}
+
+.style-modes {
+	display: flex;
+	gap: 10px;
+	justify-content: center;
+	margin-bottom: 16px;
+}
+
+.style-mode-btn.active {
+	background: var(--route-active-bg);
+	border-color: var(--route-active-border);
+	color: var(--route-active-color);
+	font-weight: bold;
+}
+
+.style-slider-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 12px;
+	font-size: 13px;
+	color: var(--text-color);
+}
+
+.style-slider-row label {
+	flex: 0 0 auto;
+	min-width: 96px;
+	text-align: left;
+}
+
+.style-slider-row input[type="range"] {
+	flex: 1 1 auto;
+	min-width: 0;
+	accent-color: var(--route-active-border);
+}
+
+.style-slider-row input[type="range"]:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+
+.style-slider-row span {
+	flex: 0 0 42px;
+	text-align: right;
+	color: var(--label-color);
 }
 
 /* ===== 路径查询 ===== */

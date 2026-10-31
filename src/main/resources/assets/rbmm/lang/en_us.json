@@ -10,5 +10,10 @@
     "key.rbmm.tts_on": "Narrator voice: ON",
     "key.rbmm.tts_off": "Narrator voice: OFF",
     "key.rbmm.depot_on": "Show depots: ON",
-    "key.rbmm.depot_off": "Show depots: OFF"
+    "key.rbmm.depot_off": "Show depots: OFF",
+    "key.rbmm.style_dark": "Map style: Dark",
+    "key.rbmm.style_light": "Map style: Light",
+    "key.rbmm.style_glass": "Map style: Glass",
+    "key.rbmm.glass_radius_value": "Glass corner radius: %s",
+    "key.rbmm.glass_opacity_value": "Glass opacity: %s%%"
 }

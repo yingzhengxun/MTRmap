@@ -10,5 +10,10 @@
     "key.rbmm.tts_on": "讲述人语音播报：开",
     "key.rbmm.tts_off": "讲述人语音播报：关",
     "key.rbmm.depot_on": "显示车厂：开",
-    "key.rbmm.depot_off": "显示车厂：关"
+    "key.rbmm.depot_off": "显示车厂：关",
+    "key.rbmm.style_dark": "地图样式：深色",
+    "key.rbmm.style_light": "地图样式：浅色",
+    "key.rbmm.style_glass": "地图样式：毛玻璃",
+    "key.rbmm.glass_radius_value": "毛玻璃圆角：%s",
+    "key.rbmm.glass_opacity_value": "毛玻璃透明度：%s%%"
 }
