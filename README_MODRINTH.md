@@ -22,15 +22,15 @@
 
 - **地图窗口（F6）**：在纯色背景上绘制 MTR 线网、车站、换乘站、车厂、列车与玩家；拖拽平移、滚轮缩放；左侧搜索与线路一览，右侧工具栏（路径查询 / 夜间模式 / 中英文 / 导出图片 / 车厂开关 / 缩放 / 重置 / 我的位置 / 行程记录）。网页地图与游戏内窗口功能保持一致。
 - **铁路仪表板按钮**：在 MTR 的铁路仪表板上注入「交通线路图」按钮，点一下用系统浏览器打开网页地图。
-- **导出图片**：整张线网导出成 PNG / JPG（最长边 4096）；纪念票根在行程记录里一键保存为 PNG（只保存，不做打印）。文件保存在 `<游戏目录>/mtrmap/`。
+- **导出图片**：整张线网导出成 PNG / JPG（最长边 4096）；纪念票根在行程记录里一键保存为 PNG（只保存，不做打印）。文件保存在 `<游戏目录>/rbmm/`。
 - **导航 HUD**：显示当前行程进度；无界面时按 `Ctrl+X` 退出导航；完成或退出导航时上传行程记录。
 
 ## 支持的版本
 
 | Minecraft | 加载器 | 下载哪个 jar |
 | --- | --- | --- |
-| 1.20.1 | Fabric / Forge | `mtrmap-<版本>-1.20.1-universal.jar` |
-| 1.21.1 | Fabric / NeoForge | `mtrmap-<版本>-1.21.1-universal.jar` |
+| 1.20.1 | Fabric / Forge | `rbmm-<版本>-1.20.1-universal.jar` |
+| 1.21.1 | Fabric / NeoForge | `rbmm-<版本>-1.21.1-universal.jar` |
 
 每个 MC 版本只发布一个 `universal` jar，同一个文件在对应的两个加载器下都能直接使用，不用区分。
 
@@ -39,7 +39,7 @@
 1. 装好对应版本的 Minecraft 与加载器。
 2. 装 **MTR（Minecraft Transit Railway）**：3.x 与 4.x 都可以（依赖范围是通配符，不挑版本）。
 3. Fabric 用户还要装 **Fabric API**；Forge / NeoForge 不需要。
-4. 把 `mtrmap-<版本>-<MC 版本>-universal.jar` 放进 `mods/` 文件夹。
+4. 把 `rbmm-<版本>-<MC 版本>-universal.jar` 放进 `mods/` 文件夹。
 
 服务端（包括开服的那台机器）同样需要装 MTR，否则本模组不会加载。除 MTR 外没有其它前置。
 
@@ -51,7 +51,7 @@
 
 ## 配置
 
-配置文件在 `mods/mapconfig/mtrmap.json`，不存在会自动创建：
+配置文件在 `mods/mapconfig/rbmm.json`，不存在会自动创建：
 
 ```json
 {
@@ -70,7 +70,7 @@
 ### 命令
 
 ```
-/mtrmap showdepots <true|false>
+/rbmm showdepots <true|false>
 ```
 
 ## 常见问题
@@ -81,8 +81,11 @@ A：看游戏启动时聊天栏的提示——端口被占用时模组会自动�
 **Q：地图上没有地形 / 底图？**
 A：本模组的地图**没有底图**，只在纯色背景上绘制线网、车站、车厂、列车与玩家——这样任何区域都能完整显示，也不依赖任何额外的地图模组或数据。
 
+**Q：游戏内地图需要联网下载浏览器内核吗？**
+A：不需要。F6 地图窗口由模组自带的 Java 绘图直接渲染（3.0.5 已移除 MCEF / CEF 方案），不依赖任何浏览器组件，也不会额外下载文件。
+
 **Q：连专用服务器 / 远程服务器能用吗？**
-A：可以。数据采集与地图服务都跑在**服务端**，端口取自服务器那份 `mods/mapconfig/mtrmap.json`；服务端会把这个端口自动同步给每个进服的客户端，游戏内 F6 窗口与导航据此访问「服务器地址:端口」，所以不用在两边的配置里填同一个端口。
+A：可以。数据采集与地图服务都跑在**服务端**，端口取自服务器那份 `mods/mapconfig/rbmm.json`；服务端会把这个端口自动同步给每个进服的客户端，游戏内 F6 窗口与导航据此访问「服务器地址:端口」，所以不用在两边的配置里填同一个端口。
 需要注意的只有网络：服务器那台机器的地图端口要能被你访问到（面板 / 防火墙放行该端口）。网页地图同理，用「服务器地址:端口」打开即可。若服务端提示端口被占用而顺延，聊天栏会告知顺延后的端口。
 
 **Q：装完进游戏报错 / 模组列表里没有？**
@@ -125,15 +128,15 @@ View your **Minecraft Transit Railway (MTR)** network from anywhere: open `http:
 
 - **Map window (F6)**: the MTR network, stations, interchanges, depots, trains and players drawn on a plain solid background. Drag to pan, scroll to zoom; search and line list on the left, toolbar on the right (route planner / night mode / language / export / depots / zoom / reset / my location / trip records). The web map and the in-game window always offer the same features.
 - **Railway dashboard button**: injects a "Traffic Map" button that opens the web map in your system browser.
-- **Export**: the whole network as PNG / JPG (max edge 4096); a souvenir ticket can be saved as PNG from the trip records (save only, no printing). Files land in `<gameDir>/mtrmap/`.
+- **Export**: the whole network as PNG / JPG (max edge 4096); a souvenir ticket can be saved as PNG from the trip records (save only, no printing). Files land in `<gameDir>/rbmm/`.
 - **Navigation HUD**: shows current trip progress; press `Ctrl+X` (with no screen open) to exit navigation; the trip is uploaded on completion or exit.
 
 ### Supported versions
 
 | Minecraft | Loaders | Which jar to download |
 | --- | --- | --- |
-| 1.20.1 | Fabric / Forge | `mtrmap-<version>-1.20.1-universal.jar` |
-| 1.21.1 | Fabric / NeoForge | `mtrmap-<version>-1.21.1-universal.jar` |
+| 1.20.1 | Fabric / Forge | `rbmm-<version>-1.20.1-universal.jar` |
+| 1.21.1 | Fabric / NeoForge | `rbmm-<version>-1.21.1-universal.jar` |
 
 Each Minecraft version ships a single `universal` jar that works on both of its loaders — no per-loader build to pick.
 
@@ -142,7 +145,7 @@ Each Minecraft version ships a single `universal` jar that works on both of its 
 1. Install the matching Minecraft version and loader.
 2. Install **MTR (Minecraft Transit Railway)**. Both 3.x and 4.x work — the dependency range is a wildcard.
 3. On Fabric you also need **Fabric API**; Forge / NeoForge do not.
-4. Drop `mtrmap-<version>-<MC version>-universal.jar` into your `mods/` folder.
+4. Drop `rbmm-<version>-<MC version>-universal.jar` into your `mods/` folder.
 
 The server (including the machine you host on) needs MTR too, otherwise this mod will not load. There are no other prerequisites besides MTR.
 
@@ -154,7 +157,7 @@ The server (including the machine you host on) needs MTR too, otherwise this mod
 
 ### Configuration
 
-The config file lives at `mods/mapconfig/mtrmap.json` and is created automatically if missing:
+The config file lives at `mods/mapconfig/rbmm.json` and is created automatically if missing:
 
 ```json
 {
@@ -173,7 +176,7 @@ Trip records are stored in `mods/mapconfig/mtrmap_trips.json`.
 #### Command
 
 ```
-/mtrmap showdepots <true|false>
+/rbmm showdepots <true|false>
 ```
 
 ### FAQ
@@ -184,8 +187,11 @@ A: Check the chat notice on world load — if the port was taken, the mod shifts
 **Q: The map has no terrain / base layer.**
 A: This mod's map has **no base layer** — it only draws the network, stations, depots, trains and players on a plain solid background, so every area displays fully and no extra map mod or data is needed.
 
+**Q: Does the in-game map need to download a browser engine?**
+A: No. The F6 window is drawn directly by the mod's own Java renderer (3.0.5 removed the MCEF / CEF approach); it needs no browser components and downloads nothing extra.
+
 **Q: Does it work on a dedicated / remote server?**
-A: Yes. Data collection and the map service run **server-side**, using the port from the server's own `mods/mapconfig/mtrmap.json`; the server syncs that port to every client that joins, so the in-game F6 window and navigation talk to `<server address>:<port>` — you no longer have to put the same port in both configs.
+A: Yes. Data collection and the map service run **server-side**, using the port from the server's own `mods/mapconfig/rbmm.json`; the server syncs that port to every client that joins, so the in-game F6 window and navigation talk to `<server address>:<port>` — you no longer have to put the same port in both configs.
 The only thing to sort out is networking: the map port on the server machine must be reachable from your machine (open it in your panel / firewall). The web map works the same way — open `<server address>:<port>`. If the server reports the port was taken and shifted, the chat notice tells you the new one.
 
 **Q: The mod doesn't show up / the game errors on startup.**

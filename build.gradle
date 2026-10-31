@@ -13,9 +13,6 @@ def mcMinor = mc.split("\\.")[1] as int
 def javaVersion = mcMinor >= 21 ? JavaVersion.VERSION_21 : JavaVersion.VERSION_17
 def javaRelease = mcMinor >= 21 ? 21 : 17
 
-// 内置 MCEF（游戏内网页地图）：加载器 jar 随通用 jar 一起发布，玩家不需要另外装 MCEF
-def mcefVersion = ["1.20.1": "2.1.6-1.20.1", "1.21.1": "2.1.6-1.21.1"][mc]
-
 // 当前 MC 版本支持哪些加载器（在 versions/<mc>/gradle.properties 里显式声明）
 def platforms = property("mod.platforms").toString().split(",")
 
@@ -59,9 +56,6 @@ dependencies {
     // 才能被（以官方映射编译的）common 代码引用。用 compileOnly 会直接报找不到 net.minecraft.class_xxxx。
     modImplementation rootProject.files("libs/${property("deps.mtr_fabric_jar")}")
 
-    // 游戏内网页地图：编译期只需要 MCEF 的 API；运行期由各加载器从内嵌 jar 里取出真正的 MCEF
-    // （不 remap：本模组只调用 MCEF 里与 MC 无关的公开接口）
-    compileOnly rootProject.files("libs/mcef/mcef-fabric-${mcefVersion}.jar")
 }
 
 // mod 的 jar 根目录必须有 pack.mcmeta，否则 Forge 会报
@@ -151,13 +145,6 @@ if (bridgePlatformPaths.size() >= 2 && project.path == ":${mc}") {
     def forgelike = hasForge ? "forge" : (hasNeoForge ? "neoforge" : null)
     def fabricJarName = "${archArtifact}-fabric-${modVersion}.jar"
     def forgelikeJarName = forgelike == null ? null : "${archArtifact}-${forgelike}-${modVersion}.jar"
-    // 内置 MCEF：加载器 jar 随通用 jar 一起发布，玩家不需要另外装 MCEF
-    def mcefFabricJar = rootProject.file("libs/mcef/mcef-fabric-${mcefVersion}.jar")
-    def mcefForgelikeJar = forgelike == null ? null : rootProject.file("libs/mcef/mcef-${forgelike}-${mcefVersion}.jar")
-    def mcefFabricJarName = "mcef-fabric-${mcefVersion}.jar"
-    def mcefForgelikeJarName = mcefForgelikeJar == null ? null : "mcef-${forgelike}-${mcefVersion}.jar"
-    // Windows x64 的 CEF 原生库：随包发布，运行时由 CefSetup 解到 mods/mcef-libraries
-    def cefNativeDir = rootProject.file("libs/cef/windows_amd64")
 
     tasks.register("generateBridgeMeta") {
         group = "versioned"
@@ -178,8 +165,6 @@ if (bridgePlatformPaths.size() >= 2 && project.path == ":${mc}") {
         inputs.property "neoforgeMajor", neoforgeMajor
         inputs.property "packFormat", packFormat
         inputs.property "fabricJarName", fabricJarName
-        inputs.property "mcefFabricJarName", mcefFabricJarName
-        inputs.property "mcefForgelikeJarName", String.valueOf(mcefForgelikeJarName)
         inputs.property "forgelikeJarName", String.valueOf(forgelikeJarName)
         outputs.dir outDir
 
@@ -214,8 +199,7 @@ if (bridgePlatformPaths.size() >= 2 && project.path == ":${mc}") {
   "license": "Apache-2.0",
   "environment": "*",
   "jars": [
-    { "file": "META-INF/jars/${fabricJarName}" },
-    { "file": "META-INF/jars/${mcefFabricJarName}" }
+    { "file": "META-INF/jars/${fabricJarName}" }
   ],
   "depends": {
     "fabricloader": ">=${fabricLoader}",
@@ -312,12 +296,6 @@ side = "BOTH"
       "version": { "range": "[${modVersion},)", "artifactVersion": "${modVersion}" },
       "path": "META-INF/jars/${forgelikeJarName}",
       "isObfuscated": false
-    },
-    {
-      "identifier": { "group": "com.cinemamod", "artifact": "mcef" },
-      "version": { "range": "[2.1.6,)", "artifactVersion": "${mcefVersion}" },
-      "path": "META-INF/jars/${mcefForgelikeJarName}",
-      "isObfuscated": false
     }
   ]
 }
@@ -406,19 +384,6 @@ public class BridgeMod {
             from(project.provider { rootProject.project(path).tasks.named("remapJar").get().archiveFile }) {
                 into "META-INF/jars"
             }
-        }
-        // 内置 MCEF：两份加载器 jar 都嵌进来，各自的加载器只取出自己那份
-        from(mcefFabricJar) {
-            into "META-INF/jars"
-        }
-        if (mcefForgelikeJar != null) {
-            from(mcefForgelikeJar) {
-                into "META-INF/jars"
-            }
-        }
-        // 内置 CEF 原生库（Windows x64），运行期由 CefSetup 解到 mods/mcef-libraries
-        from(cefNativeDir) {
-            into "rbmm-cef/windows_amd64"
         }
         from(bridgeDir)
         archiveFileName = "${archArtifact}-${modVersion}-${mc}-universal.jar"

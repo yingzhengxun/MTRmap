@@ -1,4 +1,4 @@
-# MTR Map（mtrmap）
+# Ruochu's better MTR map（rbmm）
 
 [English](#english) | 中文
 
@@ -12,7 +12,7 @@ Minecraft Transit Railway（MTR）线路图模组：服务端采集 MTR 的线�
 | --- | --- |
 | 服务端 | `MapHttpServer` 提供网页与 JSON 接口（默认 1145）；`MapDataCollector` / `TrainCollector` / `PlayerTracker` 采集 MTR 数据；`RailPathFinder` 算轨道几何；`NavTaskStore` / `TripStore` 管理导航任务与行程记录 |
 | 客户端 | `MapScreen` 游戏内地图窗口（F6）；`NavHud` 导航 HUD、`MapDataClient` 每 2 秒轮询地图服务；`MapEndpoint` 把「当前服务器地址 + 服务端同步过来的端口」拼成服务地址（专用服务端上不能写死 127.0.0.1） |
-| 网页 | `src/main/resources/assets/mtrmap/web/`（index.html / map.js / style.css），路径查询是纯前端 Dijkstra |
+| 网页 | `src/main/resources/assets/rbmm/web/`（index.html / map.js / style.css），路径查询是纯前端 Dijkstra |
 | Mixin | 只注入原版 / MTR 的界面：`DashboardScreenMixin` 加「交通线路图」按钮，`GuiHudMixin` 挂 HUD 绘制。**不修改 MTR 本体** |
 
 > **地图没有底图**：游戏内与网页都是纯色底上直接叠 MTR 线网（曾用 Xaero 世界地图当过底图，现已完全撤掉，相关代码与硬前置依赖一并移除）。
@@ -23,8 +23,8 @@ Minecraft Transit Railway（MTR）线路图模组：服务端采集 MTR 的线�
 
 | Minecraft | 加载器 | 产物 |
 | --- | --- | --- |
-| 1.20.1 | Fabric / Forge | `mtrmap-<版本>-1.20.1-universal.jar` |
-| 1.21.1 | Fabric / NeoForge | `mtrmap-<版本>-1.21.1-universal.jar` |
+| 1.20.1 | Fabric / Forge | `rbmm-<版本>-1.20.1-universal.jar` |
+| 1.21.1 | Fabric / NeoForge | `rbmm-<版本>-1.21.1-universal.jar` |
 
 1.20.1 对接 MTR 3.x，1.21.1 对接 MTR 4.x；1.21.1 没有 legacy Forge 分支，因为 MTR 在该版本只提供 Fabric / NeoForge 版。
 
@@ -63,16 +63,16 @@ mtrmap/
 │   │   │   ├── nav/                   # NavController / NavHud / NavTask
 │   │   │   ├── render/GuiSink.java    # 版本无关的 GUI 绘制封装（HUD 与地图窗口共用）
 │   │   │   └── MtrMapClientCommon.java# F6 开关、每 tick 入口
-│   │   ├── config/                    # mods/mapconfig/mtrmap.json 读写
+│   │   ├── config/                    # mods/mapconfig/rbmm.json 读写
 │   │   ├── mixin/                     # DashboardScreenMixin / hud.GuiHudMixin
 │   │   ├── platform/                  # 平台与路径抽象（各加载器实现）
 │   │   └── server/                    # HTTP 服务、数据采集、导航任务、行程记录
 │   │       ├── MtrNetwork.java        # MTR 3.x / 4.x 差异的唯一出口（版本无关快照类型）
 │   │       └── MtrRailGeometry.java   # 轨道几何
 │   └── resources/
-│       ├── assets/mtrmap/web/         # 网页源码
-│       ├── assets/mtrmap/lang/        # 中英文语言文件
-│       ├── mtrmap.mixins.json         # Mixin 配置（refmap 名固定为 mtrmap-common-refmap.json）
+│       ├── assets/rbmm/web/         # 网页源码
+│       ├── assets/rbmm/lang/        # 中英文语言文件
+│       ├── rbmm.mixins.json         # Mixin 配置（refmap 名固定为 rbmm-common-refmap.json）
 │       └── pack.mcmeta                # jar 根必须有，否则 Forge 丢掉整个资源包
 ├── fabric/  forge/  neoforge/         # 各加载器的入口、事件转接与平台实现
 ├── versions/<mc>/gradle.properties    # 每个 MC 版本的依赖与元数据配置
@@ -106,19 +106,20 @@ ResourceLocation id = new ResourceLocation("mtrmap", "tex");
 
 采用「外壳 + 内嵌」结构，一个 MC 版本只发一个 jar：
 
-- 外壳只有一个最小的 `@Mod("mtrmap_bridge")` 桥接类（`com/mtrmap/bridge/BridgeMod.class`）和元数据，没有任何业务代码，因此绝不会和内嵌 jar 抢同名类。
+- 外壳只有一个最小的 `@Mod("rbmm_bridge")` 桥接类（`com/mtrmap/bridge/BridgeMod.class`）和元数据，没有任何业务代码，因此绝不会和内嵌 jar 抢同名类。
 - 两个真实加载器 jar 放在 `META-INF/jars/` 下：Fabric 走 `fabric.mod.json` 的 `jars` 字段，Forge / NeoForge 走 JarJar 的 `META-INF/jarjar/metadata.json`。
 - 外壳的元数据、桥接源码与编译由 `build.gradle`（Stonecutter centralScript）里的 `generateBridgeMeta` / `generateBridgeSource` / `compileBridgeMod` / `universalJar` 任务自动完成。
 
 ## 开发注意事项（踩过的坑）
 
-- **Mixin refmap 名字**：`mtrmap.mixins.json` 里的 `refmap` 只能写死一个名字，而 Loom 给 common 生成的 refmap 带 MC 版本后缀（`mtrmap-common-1.20.1-refmap.json`）。所以各平台 `shadowJar` 里用 `zipTree` 再放一份改名后的拷贝（`rename "mtrmap-common-.*-refmap\\.json"`）——通过 `configurations` 合并进来的条目不走 `rename`/`eachFile`，必须手工放。
+- **Mixin refmap 名字**：`rbmm.mixins.json` 里的 `refmap` 只能写死一个名字，而 Loom 给 common 生成的 refmap 带 MC 版本后缀（`rbmm-common-1.20.1-refmap.json`）。所以各平台 `shadowJar` 里用 `zipTree` 再放一份改名后的拷贝（`rename "rbmm-common-.*-refmap\\.json"`）——通过 `configurations` 合并进来的条目不走 `rename`/`eachFile`，必须手工放。
 - **Forge 的 Mixin 注册**：Forge 只读 jar 内 `MANIFEST.MF` 的 `MixinConfigs` 属性（`mods.toml` 里的 `[[mixins]]` 是 NeoForge 专用），所以 Forge 的 `shadowJar` 里要显式写 manifest 属性。
-- **`pack.mcmeta` 必须位于 jar 根**，否则 Forge 会丢弃整个资源包，语言文件不生效（仪表板按钮会显示成 `key.mtrmap.map_button` 而不是「交通线路图」）。
+- **`pack.mcmeta` 必须位于 jar 根**，否则 Forge 会丢弃整个资源包，语言文件不生效（仪表板按钮会显示成 `key.rbmm.map_button` 而不是「交通线路图」）。
 - **MTR 依赖范围用通配符 `*`**：MTR 3.x 的版本号自带 MC 前缀（`1.20.1-3.6.3`），写死区间会被判定为不兼容而拒绝加载；4.x 又是 `4.1.0-beta.2` 这种格式。实测 3.x / 4.x 都可用。
 - **Forge 元数据的 `loaderVersion` 是 javafml 主版本**（1.20.1 填 `[47,)`），不是完整的 Forge 版本；NeoForge 的 `loaderVersion` 则是 FML loader 范围 `[1,)`。
-- **专用服务端上客户端不能写死 `127.0.0.1`**：地图服务跑在服务端那台机器上，客户端既访问不到 `127.0.0.1`，也读不到服务器那份 `mtrmap.json`。所以服务端每 tick 把实际监听的端口通过自定义包（通道 `mtrmap:port`，Fabric / Forge / NeoForge 各一套实现）同步给每个在线玩家，客户端由 `client/MapEndpoint` 拼出「当前服务器地址 + 该端口」；单人游戏没有服务器地址，退回 `127.0.0.1` + 本地配置端口。`NavController`（导航/行程）与仪表板按钮同样走这个地址。
+- **专用服务端上客户端不能写死 `127.0.0.1`**：地图服务跑在服务端那台机器上，客户端既访问不到 `127.0.0.1`，也读不到服务器那份 `rbmm.json`。所以服务端每 tick 把实际监听的端口通过自定义包（通道 `rbmm:port`，Fabric / Forge / NeoForge 各一套实现）同步给每个在线玩家，客户端由 `client/MapEndpoint` 拼出「当前服务器地址 + 该端口」；单人游戏没有服务器地址，退回 `127.0.0.1` + 本地配置端口。`NavController`（导航/行程）与仪表板按钮同样走这个地址。
 - **不要重新引入底图 / Xaero 依赖**：曾经把 Xaero 世界地图当底图（读它的显存贴图合成瓦片、上传服务端给网页用），现已完全撤掉——地图就是**纯色底上直接叠线网**。`XaeroMapTiles` / `TileTextures` / `WorldMapBridge` / `WorldMapStore`、`/api/worldmap*` 端点、`xaeroworldmap` 硬前置依赖全部删除了，不要再加回来。
+- **不要重新引入 CEF / MCEF 网页渲染**：3.0.4 曾内置 MCEF（含 Windows x64 CEF 原生库与离线校验镜像），把网页地图直接渲染到游戏内 F6 窗口；3.0.5 已整体移除，F6 回到 `MapScreen` Java 自绘。`client/cef/`、`CefSetup`、`libs/mcef/`、`libs/cef/` 以及 `build.gradle` 里的内嵌打包与 JarJar 声明都不再需要，不要再加回来。
 - **视野适配必须等到数据到了再做**：游戏内窗口的数据是后台线程每 2 秒拉一次的，`init()` 里那会儿模型还是空的；这时调 `fitView()` 会把镜头定在原点、缩放定在默认值，等数据真的到了却因为 `viewInitialized` 已是 true 而不再适配 —— 表现就是「工具栏都在、地图一片空白」。网页端一直是在 `fetch` 成功之后才 `if (!viewInitialized) fitView()`，两边行为必须一致。
 
 ## HTTP 接口
@@ -140,7 +141,7 @@ ResourceLocation id = new ResourceLocation("mtrmap", "tex");
 
 ## 配置
 
-配置文件在 `mods/mapconfig/mtrmap.json`，不存在时自动创建：
+配置文件在 `mods/mapconfig/rbmm.json`，不存在时自动创建：
 
 ```json
 {
@@ -159,7 +160,7 @@ ResourceLocation id = new ResourceLocation("mtrmap", "tex");
 命令：
 
 ```
-/mtrmap showdepots <true|false>
+/rbmm showdepots <true|false>
 ```
 
 ## 许可证
@@ -182,7 +183,7 @@ A Minecraft Transit Railway (MTR) route map mod: the server side collects MTR ne
 | --- | --- |
 | Server | `MapHttpServer` serves the web map and JSON endpoints (default 1145); `MapDataCollector` / `TrainCollector` / `PlayerTracker` collect MTR data; `RailPathFinder` computes rail geometry; `NavTaskStore` / `TripStore` hold nav tasks and trip records |
 | Client | `MapScreen` is the in-game map window (F6); `NavHud` the navigation HUD, `MapDataClient` polls the map service every 2 seconds, and `MapEndpoint` builds the service URL from the current server address plus the port the server synced (never hard-code 127.0.0.1 — it breaks on dedicated servers) |
-| Web | `src/main/resources/assets/mtrmap/web/` (index.html / map.js / style.css). The route planner is a pure client-side Dijkstra |
+| Web | `src/main/resources/assets/rbmm/web/` (index.html / map.js / style.css). The route planner is a pure client-side Dijkstra |
 | Mixin | Only injects vanilla / MTR screens: `DashboardScreenMixin` adds the "Traffic Map" button, `GuiHudMixin` hooks HUD rendering. **The MTR mod itself is never modified** |
 
 > **There is no base layer**: both the in-game window and the web map draw the MTR network straight onto a plain solid background (Xaero's World Map was once used as the base layer; it has been removed completely, together with its code and hard dependency).
@@ -193,8 +194,8 @@ A Minecraft Transit Railway (MTR) route map mod: the server side collects MTR ne
 
 | Minecraft | Loaders | Artifact |
 | --- | --- | --- |
-| 1.20.1 | Fabric / Forge | `mtrmap-<version>-1.20.1-universal.jar` |
-| 1.21.1 | Fabric / NeoForge | `mtrmap-<version>-1.21.1-universal.jar` |
+| 1.20.1 | Fabric / Forge | `rbmm-<version>-1.20.1-universal.jar` |
+| 1.21.1 | Fabric / NeoForge | `rbmm-<version>-1.21.1-universal.jar` |
 
 1.20.1 targets MTR 3.x, 1.21.1 targets MTR 4.x. There is no legacy Forge branch for 1.21.1 because MTR only ships Fabric / NeoForge builds for that version.
 
@@ -233,16 +234,16 @@ mtrmap/
 │   │   │   ├── nav/                   # NavController / NavHud / NavTask
 │   │   │   ├── render/GuiSink.java    # Version-neutral GUI drawing, shared by HUD and map window
 │   │   │   └── MtrMapClientCommon.java# F6 toggle, per-tick entry point
-│   │   ├── config/                    # mods/mapconfig/mtrmap.json read/write
+│   │   ├── config/                    # mods/mapconfig/rbmm.json read/write
 │   │   ├── mixin/                     # DashboardScreenMixin / hud.GuiHudMixin
 │   │   ├── platform/                  # Platform and path abstraction (per-loader implementations)
 │   │   └── server/                    # HTTP server, data collection, nav tasks, trip storage
 │   │       ├── MtrNetwork.java        # The single exit point for MTR 3.x / 4.x differences
 │   │       └── MtrRailGeometry.java   # Rail geometry
 │   └── resources/
-│       ├── assets/mtrmap/web/         # Web sources
-│       ├── assets/mtrmap/lang/        # Chinese and English lang files
-│       ├── mtrmap.mixins.json         # Mixin config (refmap pinned to mtrmap-common-refmap.json)
+│       ├── assets/rbmm/web/         # Web sources
+│       ├── assets/rbmm/lang/        # Chinese and English lang files
+│       ├── rbmm.mixins.json         # Mixin config (refmap pinned to rbmm-common-refmap.json)
 │       └── pack.mcmeta                # Must sit at the jar root or Forge drops the whole resource pack
 ├── fabric/  forge/  neoforge/         # Loader entry points, event bridges and platform implementations
 ├── versions/<mc>/gradle.properties    # Per-MC dependency and metadata config
@@ -276,19 +277,20 @@ Version differences are concentrated in a few files so upper layers stay unaware
 
 A "shell + embedded jars" layout, one jar per MC version:
 
-- The shell contains only a minimal `@Mod("mtrmap_bridge")` bridge class (`com/mtrmap/bridge/BridgeMod.class`) plus metadata and no business code, so it can never clash with the embedded jars over class names.
+- The shell contains only a minimal `@Mod("rbmm_bridge")` bridge class (`com/mtrmap/bridge/BridgeMod.class`) plus metadata and no business code, so it can never clash with the embedded jars over class names.
 - The two real loader jars live under `META-INF/jars/`: Fabric loads them via the `jars` field in `fabric.mod.json`, Forge / NeoForge via JarJar's `META-INF/jarjar/metadata.json`.
 - The shell's metadata, bridge source and compilation are produced automatically by the `generateBridgeMeta` / `generateBridgeSource` / `compileBridgeMod` / `universalJar` tasks in `build.gradle` (the Stonecutter centralScript).
 
 ### Gotchas
 
-- **Mixin refmap name**: the `refmap` in `mtrmap.mixins.json` must be a fixed name, but Loom generates the common refmap with an MC-version suffix (`mtrmap-common-1.20.1-refmap.json`). Each platform's `shadowJar` therefore copies a renamed duplicate in via `zipTree` (`rename "mtrmap-common-.*-refmap\\.json"`) — entries merged through `configurations` bypass `rename` / `eachFile`, so it has to be done by hand.
+- **Mixin refmap name**: the `refmap` in `rbmm.mixins.json` must be a fixed name, but Loom generates the common refmap with an MC-version suffix (`rbmm-common-1.20.1-refmap.json`). Each platform's `shadowJar` therefore copies a renamed duplicate in via `zipTree` (`rename "rbmm-common-.*-refmap\\.json"`) — entries merged through `configurations` bypass `rename` / `eachFile`, so it has to be done by hand.
 - **Forge mixin registration**: Forge only reads the `MixinConfigs` attribute in the jar's `MANIFEST.MF` (the `[[mixins]]` block in `mods.toml` is NeoForge-only), so Forge's `shadowJar` sets that manifest attribute explicitly.
-- **`pack.mcmeta` must be at the jar root**, otherwise Forge drops the whole resource pack and the lang files never load (the dashboard button then shows `key.mtrmap.map_button` instead of "Traffic Map").
+- **`pack.mcmeta` must be at the jar root**, otherwise Forge drops the whole resource pack and the lang files never load (the dashboard button then shows `key.rbmm.map_button` instead of "Traffic Map").
 - **Declare the MTR dependency range as the wildcard `*`**: MTR 3.x reports versions with an MC prefix (`1.20.1-3.6.3`), so a hard-coded range is judged out of range and refuses to load, while 4.x uses formats like `4.1.0-beta.2`. Both 3.x and 4.x are verified to work.
 - **Forge metadata's `loaderVersion` is the javafml major version** (`[47,)` for 1.20.1), not a full Forge version; NeoForge's `loaderVersion` is the FML loader range `[1,)`.
-- **Never hard-code `127.0.0.1` on the client (dedicated servers)**: the map service runs on the server machine, so a client can neither reach `127.0.0.1` nor read the server's `mtrmap.json`. The server therefore syncs its actual port to every online player via a custom packet (channel `mtrmap:port`, with a Fabric / Forge / NeoForge implementation each) and the client's `client/MapEndpoint` builds `<current server address>:<port>`; single-player has no server address and falls back to `127.0.0.1` plus the local config port. `NavController` (navigation / trips) and the dashboard button use that same address.
+- **Never hard-code `127.0.0.1` on the client (dedicated servers)**: the map service runs on the server machine, so a client can neither reach `127.0.0.1` nor read the server's `rbmm.json`. The server therefore syncs its actual port to every online player via a custom packet (channel `rbmm:port`, with a Fabric / Forge / NeoForge implementation each) and the client's `client/MapEndpoint` builds `<current server address>:<port>`; single-player has no server address and falls back to `127.0.0.1` plus the local config port. `NavController` (navigation / trips) and the dashboard button use that same address.
 - **Do not reintroduce a base layer / Xaero dependency**: Xaero's World Map was once used as the base layer (reading its GPU textures, assembling tiles and uploading them to the server for the web map); it has been removed completely — the map is now **the network drawn straight onto a plain solid background**. `XaeroMapTiles` / `TileTextures` / `WorldMapBridge` / `WorldMapStore`, the `/api/worldmap*` endpoints and the `xaeroworldmap` hard dependency are all gone; do not add them back.
+- **Do not reintroduce CEF / MCEF web rendering**: 3.0.4 once bundled MCEF (including the Windows x64 CEF natives and an offline checksum mirror) to render the web map straight into the in-game F6 window; 3.0.5 removes it entirely and F6 is back to the Java-drawn `MapScreen`. `client/cef/`, `CefSetup`, `libs/mcef/`, `libs/cef/` and the embedding / JarJar declarations in `build.gradle` are no longer needed; do not add them back.
 - **Fit the view only once the data has arrived**: the in-game window polls on a background thread every 2 seconds, so the model is still empty inside `init()`; calling `fitView()` there pins the camera to the origin at the default zoom, and since `viewInitialized` is already true it never re-fits when the data lands — the symptom is "all the toolbar buttons are there, the map is blank". The web map has always called `if (!viewInitialized) fitView()` *after* a successful `fetch`; both sides must behave the same.
 
 ### HTTP endpoints
@@ -310,7 +312,7 @@ A "shell + embedded jars" layout, one jar per MC version:
 
 ### Configuration
 
-The config file lives at `mods/mapconfig/mtrmap.json` and is created automatically if missing:
+The config file lives at `mods/mapconfig/rbmm.json` and is created automatically if missing:
 
 ```json
 {
@@ -329,7 +331,7 @@ Trip records are persisted to `mods/mapconfig/mtrmap_trips.json` (archived per p
 Command:
 
 ```
-/mtrmap showdepots <true|false>
+/rbmm showdepots <true|false>
 ```
 
 ### License

@@ -17,9 +17,7 @@ public class MtrMapNeoForge {
         NeoForgeNetwork.register(modEventBus);
 
         // 模组菜单里的「配置」按钮：打开本模组设置界面（只在客户端注册）
-        if (net.neoforged.api.distmarker.Dist.CLIENT.isClient()) {
-        // 内置 MCEF：先把随包的原生库解出来，并关掉 MCEF 的联网下载（改成走本地镜像）
-        com.mtrmap.client.cef.CefSetup.prepare();
+        if (net.neoforged.api.distmarker.Dist.CLIENT.isClient()) {
             net.neoforged.fml.ModList.get().getModContainerById("rbmm").ifPresent(container ->
                     container.registerExtensionPoint(
                             net.neoforged.neoforge.client.gui.IConfigScreenFactory.class,
