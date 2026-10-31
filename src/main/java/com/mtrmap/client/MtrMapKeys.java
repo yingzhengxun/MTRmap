@@ -2,6 +2,8 @@ package com.mtrmap.client;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mtrmap.MtrMapCommon;
+import com.mtrmap.client.cef.CefMap;
+import com.mtrmap.client.cef.CefMapScreen;
 import com.mtrmap.client.map.MapScreen;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -54,8 +56,8 @@ public final class MtrMapKeys {
             com.mtrmap.client.nav.NavController.toggleCollapsed();
         }
         while (openSettings.consumeClick()) {
-            if (client.screen == null || client.screen instanceof MapScreen) {
-                client.setScreen(new SettingsScreen(client.screen instanceof MapScreen
+            if (client.screen == null || client.screen instanceof MapScreen || client.screen instanceof CefMapScreen) {
+                client.setScreen(new SettingsScreen(client.screen instanceof MapScreen || client.screen instanceof CefMapScreen
                         ? client.screen : null));
             }
         }
@@ -63,11 +65,21 @@ public final class MtrMapKeys {
 
     /** 地图窗口开关：只在没有任何界面、或当前界面就是地图时响应。 */
     private static void toggleMap(Minecraft client) {
-        if (client.screen instanceof MapScreen) {
+        if (client.screen instanceof MapScreen || client.screen instanceof CefMapScreen) {
             client.setScreen(null);
         } else if (client.screen == null) {
-            MtrMapCommon.LOGGER.info("打开地图窗口");
+            openMap(client);
+        }
+    }
+
+    /** 打开地图窗口：优先用 CEF 渲染网页地图，内核不可用时退回 Java 自绘地图。 */
+    private static void openMap(Minecraft client) {
+        if (CefMap.state() == CefMap.State.UNAVAILABLE) {
+            MtrMapCommon.LOGGER.info("网页内核不可用，打开 Java 版地图窗口");
             client.setScreen(new MapScreen());
+        } else {
+            MtrMapCommon.LOGGER.info("打开网页地图窗口");
+            client.setScreen(new CefMapScreen());
         }
     }
 }
