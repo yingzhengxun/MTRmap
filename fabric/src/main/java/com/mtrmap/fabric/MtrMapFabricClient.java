@@ -19,7 +19,9 @@ public class MtrMapFabricClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         Platform.set(new FabricPlatformImpl());
-        MtrMapClientCommon.init();
+        MtrMapClientCommon.init();
+        // 内置 MCEF：先把随包的原生库解出来，并关掉 MCEF 的联网下载（改成走本地镜像）
+        com.mtrmap.client.cef.CefSetup.prepare();
 
         ClientTickEvents.END_CLIENT_TICK.register(MtrMapClientCommon::onClientTick);
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> MtrMapClientCommon.onDisconnect());
