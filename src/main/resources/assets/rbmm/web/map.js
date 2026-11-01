@@ -323,6 +323,10 @@
 	let routeMode = false;
 	let routeStartId = null;
 	let routeEndId = null;
+	// 下一次点地图车站要填的字段：1 = 起点，2 = 终点。
+	// 不能只看 id 是否为空：查询完成后再点站，旧逻辑会静默把起点换掉、终点清空，
+	// 表现出来就是「点哪个站都变成起点」。这里用显式的下一步状态推进。
+	let routePickField = 1;
 	let routeResult = null;
 	let activeRouteTab = 0;
 	let legExpandState = {};
@@ -2023,6 +2027,7 @@
 			// 失焦会走 restoreRouteFieldText，此时调用方应已把 id 清空
 			if (document.activeElement === input) input.blur();
 		});
+		routePickField = 1;
 	}
 
 	// 按站名（主名 / 译名，大小写不敏感、包含匹配）挑候选，最多 8 条
@@ -2113,10 +2118,12 @@
 		if (field === 'from') {
 			routeStartId = st.id;
 			routeFromMyLocation = false;   // 手动选站后不再用「我的位置」的步行指引
+			routePickField = 2;
 		} else {
 			// 与游戏内一致：终点不能再选起点同一个站
 			if (routeStartId !== null && st.id === routeStartId) return;
 			routeEndId = st.id;
+			routePickField = 1;
 		}
 		const input = routeFieldInput(field);
 		const state = routeFieldState[field];
@@ -2300,6 +2307,7 @@
 		}
 		routeStartId = st.id;
 		routeFromMyLocation = true;
+		routePickField = routeEndId !== null ? 1 : 2;
 		lastMyPos = { x: info.x, z: info.z };
 		routeResult = null;
 		activeRouteTab = 0;
@@ -2647,6 +2655,9 @@
 			tooltipEl.style.display = 'none';
 			// 关闭面板时收起候选并还原输入框文本
 			resetRouteFields();
+		} else {
+			// 重新打开面板时按现有选择接着走：没起点 → 选起点；有起点没终点 → 选终点
+			routePickField = routeStartId === null ? 1 : (routeEndId === null ? 2 : 1);
 		}
 		updateRoutePanel();
 		render();
@@ -2655,25 +2666,26 @@
 	function getStationAt(mx, my) {
 		if (!mapData.stations) return null;
 		const radius = stationRadius();
-		// 换乘站胶囊优先：胶囊很长，范围内常压着别的车站圆点。
-		// 若只按距离取最近，先遍历到的普通站会把命中抢走，
-		// 用户点胶囊两端或中段时就选不到换乘站。这里先把胶囊扫一遍。
-		let capsuleHit = null;
-		let capsuleDist = 10;
-		mapData.stations.forEach(st => {
-			if (!isInterchange(st) || !interchangeCapsule(st, radius * 2)) return;
-			const d = stationMarkerDistance(st, mx, my, radius);
-			if (d < capsuleDist) { capsuleDist = d; capsuleHit = st; }
-		});
-		if (capsuleHit) return capsuleHit;
-		// 容差 + 标记自身大小
+		// 命中距离优先；距离一样时选「看得见的标记中心」离指针更近的那个：
+		// 这样点在普通站圆点上不会被旁边换乘站的大胶囊抢走，
+		// 而点在胶囊中段或两端（附近没有圆点）时仍然选得中换乘站。
 		let best = null;
-		let bestDist = 10;
+		let bestScore = Infinity;
 		mapData.stations.forEach(st => {
 			const d = stationMarkerDistance(st, mx, my, radius);
-			if (d <= bestDist) { bestDist = d; best = st; }
+			if (d >= 10) return;
+			const score = d * 40 + Math.min(stationAnchorDistance(st, mx, my, radius), 60);
+			if (score < bestScore) { bestScore = score; best = st; }
 		});
 		return best;
+	}
+
+	// 指针到车站「可见标记中心」的距离（换乘站用胶囊中心，普通站用圆点中心）
+	function stationAnchorDistance(st, mx, my, radius) {
+		const cap = isInterchange(st) ? interchangeCapsule(st, radius * 2) : null;
+		if (cap) return Math.hypot(cap.cx - mx, cap.cy - my);
+		const p = worldToCanvas(st.x, st.z);
+		return Math.hypot(p.x - mx, p.y - my);
 	}
 
 	// 车站标记到鼠标的距离（落在标记上为 0）
@@ -2702,26 +2714,30 @@
 		return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 	}
 
-	// 依次选择起点 / 终点；两者都已选时把本次点击当作新的起点
+	// 依次选择起点 / 终点：用 routePickField 显式推进；查询完成后再点站就是开一次新查询
 	function handleStationPick(station) {
 		if (!station) return;
-		if (routeStartId === null) {
-			routeStartId = station.id;
-			routeFromMyLocation = false;
-		} else if (routeEndId === null) {
-			// 与游戏内一致：终点不能再选起点同一个站（否则会算出「起点与终点相同」）
-			if (station.id === routeStartId) return;
-			routeEndId = station.id;
-		} else {
-			// 点重了当前起点/终点时保持现有查询不动，只有点第三站才开新查询
-			if (station.id === routeStartId || station.id === routeEndId) return;
-			routeStartId = station.id;
-			routeEndId = null;
-			routeFromMyLocation = false;
-		}
 		routeResult = null;
 		activeRouteTab = 0;
 		legExpandState = {};
+		// 该填终点：只要已经有起点就直接设终点，不再看终点 id 的旧值
+		if (routePickField === 2 && routeStartId !== null) {
+			if (station.id === routeStartId) {
+				routeHintEl.textContent = t('route_same_station');
+				return;
+			}
+			routeEndId = station.id;
+			routePickField = 1;
+			computeRoutes();
+			updateRoutePanel();
+			render();
+			return;
+		}
+		// 该填起点（点第三站等于开一次新查询）
+		routeStartId = station.id;
+		routeEndId = null;
+		routeFromMyLocation = false;
+		routePickField = 2;
 		updateRoutePanel();
 		render();
 	}

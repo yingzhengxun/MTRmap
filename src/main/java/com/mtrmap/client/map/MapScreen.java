@@ -101,6 +101,13 @@ public class MapScreen extends Screen {
 	private String lastNavRev;
 	/** 路径面板输入框聚焦：0 = 无，1 = 起点，2 = 终点 */
 	private int routeInputFocus;
+	/**
+	 * 下一次点地图车站要填的字段：1 = 起点，2 = 终点。
+	 *
+	 * <p>不能只看 id 是否为空：查询完成后再点站，旧逻辑会静默把起点换掉、终点清空，
+	 * 表现出来就是「点哪个站都变成起点」。这里用显式的下一步状态推进。
+	 */
+	private int routePickField = 1;
 	private String routeStartText = "";
 	private String routeEndText = "";
 	private int routeStartCursor;
@@ -999,6 +1006,11 @@ public class MapScreen extends Screen {
 		if (routeMessage != null) {
 			lines.add(routeMessage);
 		}
+		// 还没出方案也没报错：告诉玩家下一次点地图是在选起点还是终点
+		if (hasRouteHint()) {
+			lines.add(s(routePickField == 2 ? "请点地图上的车站选择终点" : "请点地图上的车站选择起点",
+					routePickField == 2 ? "Click a station as destination" : "Click a station as start"));
+		}
 		RoutePlanner.Option option = routeOptions.isEmpty() ? null
 				: routeOptions.get(Math.min(activeRouteTab, routeOptions.size() - 1));
 		// 步骤行数封顶：面板再高就要超出小窗口了（极复杂的换乘方案只显示前 7 步）
@@ -1282,10 +1294,12 @@ public class MapScreen extends Screen {
 			routeStartId = station.id;
 			routeStartText = stationLabel(station);
 			routeStartCursor = routeStartText.length();
+			routePickField = 2;
 		} else {
 			routeEndId = station.id;
 			routeEndText = stationLabel(station);
 			routeEndCursor = routeEndText.length();
+			routePickField = 1;
 		}
 		routeFromMyLocation = false;
 		routeInputFocus = 0;
@@ -1304,6 +1318,7 @@ public class MapScreen extends Screen {
 		startWalk = null;
 		routeFromMyLocation = false;
 		routeInputFocus = 0;
+		routePickField = 1;
 		routeStartText = "";
 		routeEndText = "";
 		routeStartCursor = 0;
@@ -1762,35 +1777,35 @@ public class MapScreen extends Screen {
 
 	private MapModel.Station pickStation(MapModel model, double mouseX, double mouseY, double radius) {
 		// 容差：标记本身有大小，点在标记外一点点也算命中
-		double pick = 8;
-		// 换乘站胶囊优先：胶囊很长，范围内常压着别的车站圆点。
-		// 若只按距离取最近，先遍历到的普通站会把命中抢走，
-		// 用户点胶囊两端或中段时就选不到换乘站。这里先把胶囊扫一遍。
-		MapModel.Station capsuleHit = null;
-		double capsuleDist = pick;
+		double pick = 10;
+		MapModel.Station best = null;
+		double bestScore = Double.MAX_VALUE;
 		for (MapModel.Station station : model.stations) {
-			if (!station.isInterchange() || !station.hasBounds()) {
+			double d = markerDistance(station, mouseX, mouseY, radius);
+			if (d >= pick) {
 				continue;
 			}
-			double d = markerDistance(station, mouseX, mouseY, radius);
-			if (d < capsuleDist) {
-				capsuleDist = d;
-				capsuleHit = station;
-			}
-		}
-		if (capsuleHit != null) {
-			return capsuleHit;
-		}
-		MapModel.Station best = null;
-		double bestDist = pick;
-		for (MapModel.Station station : model.stations) {
-			double d = markerDistance(station, mouseX, mouseY, radius);
-			if (d < bestDist) {
-				bestDist = d;
+			// 命中距离优先；距离一样时选「看得见的标记中心」离指针更近的那个：
+			// 这样点在普通站圆点上不会被旁边换乘站的大胶囊抢走，
+			// 而点在胶囊中段/两端（附近没有圆点）时仍然选得中换乘站。
+			double score = d * 40 + Math.min(anchorDistance(station, mouseX, mouseY, radius), 60);
+			if (score < bestScore) {
+				bestScore = score;
 				best = station;
 			}
 		}
 		return best;
+	}
+
+	/** 指针到车站「可见标记中心」的距离（换乘站用胶囊中心，普通站用圆点中心） */
+	private double anchorDistance(MapModel.Station station, double mouseX, double mouseY, double radius) {
+		if (station.isInterchange() && station.hasBounds()) {
+			double[] capsule = capsule(station, radius * 2);
+			if (capsule != null) {
+				return Math.hypot(capsule[0] - mouseX, capsule[1] - mouseY);
+			}
+		}
+		return Math.hypot(worldToScreenX(station.x) - mouseX, worldToScreenY(station.z) - mouseY);
 	}
 
 	/**
@@ -1845,36 +1860,31 @@ public class MapScreen extends Screen {
 		// 在地图上点站：输入框退出编辑态，候选清空
 		routeInputFocus = 0;
 		clearRouteHits();
-		if (routeStartId < 0) {
-			routeStartId = station.id;
-			routeFromMyLocation = false;
-			routeStartText = stationLabel(station);
-			routeStartCursor = routeStartText.length();
-		} else if (routeEndId < 0) {
+		// 该填终点：只要已经有起点就直接设终点，不再看终点 id 的旧值
+		if (routePickField == 2 && routeStartId >= 0) {
 			if (station.id == routeStartId) {
+				routeMessage = s("起点与终点相同", "Same station");
 				return;
 			}
 			routeEndId = station.id;
 			routeEndText = stationLabel(station);
 			routeEndCursor = routeEndText.length();
+			routePickField = 1;
 			computeRoutes();
-		} else {
-			// 起点、终点都已选好时，点第三站才开始新一次查询；
-			// 若点的就是当前起点或终点（点重了），保持现有查询不动
-			if (station.id == routeStartId || station.id == routeEndId) {
-				return;
-			}
-			routeStartId = station.id;
-			routeEndId = -1;
-			routeStartText = stationLabel(station);
-			routeStartCursor = routeStartText.length();
-			routeEndText = "";
-			routeEndCursor = 0;
-			routeOptions = new ArrayList<>();
-			routeMessage = null;
-			startWalk = null;
-			routeFromMyLocation = false;
+			return;
 		}
+		// 该填起点（点第三站等于开一次新查询）
+		routeStartId = station.id;
+		routeEndId = -1;
+		routeStartText = stationLabel(station);
+		routeStartCursor = routeStartText.length();
+		routeEndText = "";
+		routeEndCursor = 0;
+		routeOptions = new ArrayList<>();
+		routeMessage = null;
+		startWalk = null;
+		routeFromMyLocation = false;
+		routePickField = 2;
 	}
 
 	private void updateSearchHits(MapModel model) {
@@ -2120,6 +2130,7 @@ public class MapScreen extends Screen {
 		routeStartText = stationLabel(nearest);
 		routeStartCursor = routeStartText.length();
 		routeInputFocus = 0;
+		routePickField = routeEndId >= 0 ? 1 : 2;
 		clearRouteHits();
 		if (routeEndId >= 0) {
 			computeRoutes();
@@ -2473,7 +2484,15 @@ public class MapScreen extends Screen {
 		if (routeMessage != null) {
 			lines++;
 		}
+		if (hasRouteHint()) {
+			lines++;
+		}
 		return lines * LINE_H;
+	}
+
+	/** 是否要显示「下一次点地图选起点/终点」的提示行（与绘制、高度计算共用） */
+	private boolean hasRouteHint() {
+		return routeOptions.isEmpty() && routeMessage == null;
 	}
 
 	/** 路径面板高度（画与点击必须用同一个值）：标题 + 两个输入框 + 候选 + 按钮 + 提示 + 方案 */
@@ -2543,7 +2562,10 @@ public class MapScreen extends Screen {
 		routeMode = on;
 		if (!on) {
 			resetRoute();
+			return;
 		}
+		// 重新打开面板时按现有选择接着走：没起点 → 选起点；有起点没终点 → 选终点
+		routePickField = routeStartId < 0 ? 1 : (routeEndId < 0 ? 2 : 1);
 	}
 
 	// ===== 绘制小工具 =====
