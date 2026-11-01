@@ -22,8 +22,9 @@ import java.nio.ByteOrder;
  * 先用 GPU 缩小到 GUI 像素尺寸，再在 CPU 上做类似高斯的两遍盒式模糊，
  * 最后贴成一张动态纹理，面板绘制时按圆角逐行采样 —— 就得到了「透过玻璃、背景被模糊」的效果。
  *
- * <p>抓取按 25ms 节流，只在毛玻璃模式下调用；任何一步失败（驱动不支持 / 状态异常）
- * 就把 {@link #isAvailable()} 置为 false，调用方退回半透明实色，不影响正常游玩。
+ * <p>抓取按 50ms 节流，只在毛玻璃模式下、且上一帧确实画过毛玻璃卡片时才调用；
+ * 任何一步失败（驱动不支持 / 状态异常）就把 {@link #isAvailable()} 置为 false，
+ * 调用方退回半透明实色，不影响正常游玩。
  */
 public final class GlassBackdrop {
 
@@ -33,8 +34,8 @@ public final class GlassBackdrop {
 	*///?} else {
 	private static final ResourceLocation LOCATION = new ResourceLocation("rbmm", "glass_backdrop");
 	//?}
-	/** 抓取间隔（纳秒） */
-	private static final long CAPTURE_INTERVAL = 25_000_000L;
+	/** 抓取间隔（纳秒）：抓屏 + CPU 模糊很贵，50ms 一次（约 20fps 更新）已经看不出卡顿 */
+	private static final long CAPTURE_INTERVAL = 50_000_000L;
 
 	private static int framebuffer = -1;
 	private static int texture = -1;
@@ -241,9 +242,10 @@ public final class GlassBackdrop {
 				warped[row + x] = raw[sourceRow + sx];
 			}
 		}
-		// 模糊半径：每 GUI 像素在屏幕上占 guiScale 像素，按 14 屏幕像素折算
-		int radius = (int) Math.round(14.0 / guiScale);
-		radius = Math.max(2, Math.min(14, radius));
+		// 模糊半径：模糊纹理是 GUI 像素尺寸，半径按 GUI 缩放折算。
+		// 小 GUI 缩放（1~2）时半径过大会让 4 遍盒式模糊的代价翻十几倍，这里封顶 6。
+		int radius = (int) Math.round(10.0 / Math.max(1.0, guiScale));
+		radius = Math.max(2, Math.min(6, radius));
 		boxBlur(warped, blurA, blurB, width, height, radius);
 		System.arraycopy(blurB, 0, raw, 0, width * height);
 	}

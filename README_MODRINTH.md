@@ -12,7 +12,7 @@
 
 - **线路图**：画布绘制线路、车站、换乘站、车厂与列车；换乘站用跑道形（胶囊）标记，范围覆盖该站所有线路的站台。
 - **搜索与详情**：随时搜索车站或线路，点开看详情侧边栏（坐标、经过线路、站数、全程时间、班次间隔）。
-- **路径查询**：纯前端计算的多种方案，标注换乘次数、总距离、预计时间与乘车方向（`开往 <终点站>`）。
+- **路径查询**：纯前端计算的多种方案，标注换乘次数、总距离、预计时间与乘车方向（`开往 <终点站>`）。起点与终点既可以直接点地图上的车站，也可以在面板输入站名，输入时会实时弹出候选车站供选择。
 - **我的位置**：每 2 秒刷新，位置变化自动重绘地图、更新出发点并重新查询路线；退出游戏后自动隐藏玩家卡片。
 - **行程记录**：按玩家存档，可删除单条记录，一键生成**纪念票根**（PNG 下载）。
 - **导航下发**：选好方案后把乘车步骤推送到游戏内，HUD 面板会显示当前行程进度。
@@ -24,7 +24,7 @@
 - **地图窗口（F6）**：在纯色背景上绘制 MTR 线网、车站、换乘站、车厂、列车与玩家；拖拽平移、滚轮缩放；左侧搜索与线路一览，右侧工具栏（路径查询 / 地图样式 / 中英文 / 导出图片 / 车厂开关 / 缩放 / 重置 / 我的位置 / 行程记录）。所有面板与控件统一支持浅色、深色、毛玻璃三种样式，毛玻璃的圆角与透明度可在设置界面调整。毛玻璃为半透明磨砂玻璃质感：背景内容透过玻璃被实时模糊（游戏内从当前画面抓取后做高斯近似模糊，网页端用 backdrop-filter），表面带柔和高光、冷色渐变与缓慢流动的光斑（液态感），边缘有 1px 亮边与内圈折射亮边，卡片带圆角与悬浮阴影。网页地图与游戏内窗口功能保持一致。
 - **铁路仪表板按钮**：在 MTR 的铁路仪表板上注入「交通线路图」按钮，点一下用系统浏览器打开网页地图。
 - **导出图片**：整张线网导出成 PNG / JPG（最长边 4096）；纪念票根在行程记录里一键保存为 PNG（只保存，不做打印）。文件保存在 `<游戏目录>/rbmm/`。
-- **导航 HUD**：显示当前行程进度；无界面时按 `Ctrl+X` 退出导航；完成或退出导航时上传行程记录。
+- **导航 HUD**：显示当前行程进度；无界面时按 `Ctrl+X` 退出导航；完成或退出导航时上传行程记录。地图样式选毛玻璃时，HUD 也会换成圆角半透明玻璃卡片（带高光与亮边）。
 
 ## 支持的版本
 
@@ -122,7 +122,7 @@ View your **Minecraft Transit Railway (MTR)** network from anywhere: open `http:
 
 - **Network map**: canvas rendering of lines, stations, interchanges, depots and trains. Interchange stations use a stadium/capsule marker covering the platforms of every line serving them.
 - **Search & details**: search stations or lines at any time and open a detail sidebar (coordinates, lines served, stop count, full-trip time, headway).
-- **Route planner**: several client-side options with transfer counts, total distance, estimated time and ride direction (`towards <terminus>`).
+- **Route planner**: several client-side options with transfer counts, total distance, estimated time and ride direction (`towards <terminus>`). Pick the start and destination by clicking stations on the map, or type a station name in the panel and choose from the live suggestions.
 - **My Location**: refreshed every 2 seconds; position changes redraw the map, update the origin and re-run the route query. The player card hides itself once you leave the game.
 - **Trip history**: archived per player, individually deletable, with a one-click **souvenir ticket** (PNG download).
 - **Navigation dispatch**: push the chosen itinerary into the game; the HUD panel shows current progress.
@@ -133,7 +133,7 @@ View your **Minecraft Transit Railway (MTR)** network from anywhere: open `http:
 - **Map window (F6)**: the MTR network, stations, interchanges, depots, trains and players drawn on a plain solid background. Drag to pan, scroll to zoom; search and line list on the left, toolbar on the right (route planner / night mode / language / export / depots / zoom / reset / my location / trip records). The web map and the in-game window always offer the same features.
 - **Railway dashboard button**: injects a "Traffic Map" button that opens the web map in your system browser.
 - **Export**: the whole network as PNG / JPG (max edge 4096); a souvenir ticket can be saved as PNG from the trip records (save only, no printing). Files land in `<gameDir>/rbmm/`.
-- **Navigation HUD**: shows current trip progress; press `Ctrl+X` (with no screen open) to exit navigation; the trip is uploaded on completion or exit.
+- **Navigation HUD**: shows current trip progress; press `Ctrl+X` (with no screen open) to exit navigation; the trip is uploaded on completion or exit. With the frosted-glass map style the HUD turns into a rounded translucent glass card with highlights and a light edge.
 
 ### Supported versions
 

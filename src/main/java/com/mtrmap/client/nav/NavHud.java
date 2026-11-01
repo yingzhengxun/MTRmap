@@ -1,6 +1,7 @@
 package com.mtrmap.client.nav;
 
 import com.mtrmap.client.render.GuiSink;
+import com.mtrmap.config.MtrMapConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 
@@ -74,9 +75,11 @@ public final class NavHud {
             return;
         }
 
+        boolean glass = isGlass();
+
         // PgUp 收起态：只显示一枚胶囊，里面是当前正在进行的那一步
         if (NavController.isCollapsed()) {
-            drawCapsule(sink, font, guiW, task);
+            drawCapsule(sink, font, guiW, task, glass);
             return;
         }
 
@@ -110,9 +113,17 @@ public final class NavHud {
             y = Math.max(MARGIN, logicalH - panelH - MARGIN);
         }
 
-        // 面板底 + 边框
-        sink.fill(x, y, x + PANEL_W, y + panelH, applyAlpha(BG, titleAlpha));
-        border(sink, x, y, PANEL_W, panelH, applyAlpha(BORDER, titleAlpha));
+        // 面板底 + 边框：毛玻璃主题走玻璃卡片，其他主题保持原来的黑底
+        if (glass) {
+            // 注意：这里刻意不调用 GlassBackdrop.capture()。
+            // HUD 每帧都画在游戏画面上，抓 framebuffer + CPU 模糊的代价比 HUD 本身高一个数量级；
+            // 而且抓屏会把 HUD 自己上帧的画面也抓进去，形成拖影。
+            // 所以 HUD 的玻璃只用半透明冷色渐变 + 顶部高光 + 亮边/内折射边，不做背景模糊采样。
+            glassPanel(sink, x, y, PANEL_W, panelH, titleAlpha);
+        } else {
+            sink.fill(x, y, x + PANEL_W, y + panelH, applyAlpha(BG, titleAlpha));
+            border(sink, x, y, PANEL_W, panelH, applyAlpha(BORDER, titleAlpha));
+        }
 
         int tx = x + PAD;
         int innerW = PANEL_W - PAD * 2 - 4;
@@ -138,12 +149,13 @@ public final class NavHud {
         float p = clamp((now - animStart) / ANIM_MS, 0f, 1f);
         float ease = 1f - (1f - p) * (1f - p);
         int firstRowY = cy;
+        int highlight = glass ? 0x4DFFFFFF : HIGHLIGHT;
         if (fromIndex >= 0 && fromIndex != idx && fromIndex < stepCount) {
             float hy = lerp(firstRowY + fromIndex * ROW_H, firstRowY + idx * ROW_H, ease);
-            sink.fill(x + 3, (int) hy, x + PANEL_W - 3, (int) hy + ROW_H - 2, applyAlpha(HIGHLIGHT, ease));
+            sink.fill(x + 3, (int) hy, x + PANEL_W - 3, (int) hy + ROW_H - 2, applyAlpha(highlight, ease));
         } else if (fromIndex < 0 || fromIndex == idx) {
             sink.fill(x + 3, firstRowY + idx * ROW_H, x + PANEL_W - 3,
-                    firstRowY + idx * ROW_H + ROW_H - 2, applyAlpha(HIGHLIGHT, titleAlpha));
+                    firstRowY + idx * ROW_H + ROW_H - 2, applyAlpha(highlight, titleAlpha));
         }
 
         for (int i = 0; i < stepCount; i++) {
@@ -177,7 +189,7 @@ public final class NavHud {
     }
 
     /** 收起态胶囊：贴在右上角，只显示当前正在进行的任务 */
-    private static void drawCapsule(GuiSink sink, Font font, int guiW, NavTask task) {
+    private static void drawCapsule(GuiSink sink, Font font, int guiW, NavTask task, boolean glass) {
         int idx = NavController.getStepIndex();
         if (idx < 0 || idx >= task.steps.length) {
             return;
@@ -193,8 +205,12 @@ public final class NavHud {
         int y = MARGIN;
         sink.push();
         sink.translate(0f, 0f, 300f);
-        sink.fill(x, y, x + w, y + h, 0xE6000000);
-        border(sink, x, y, w, h, 0xFF3A3A3A);
+        if (glass) {
+            glassPanel(sink, x, y, w, h, 1f);
+        } else {
+            sink.fill(x, y, x + w, y + h, 0xE6000000);
+            border(sink, x, y, w, h, 0xFF3A3A3A);
+        }
         int dot = s.walk ? 0xFFFFD040 : opaque(s.color);
         sink.fill(x + 6, y + 5, x + 9, y + 11, dot);
         sink.text(font, text, x + w / 2f + 1f, y + 4, TITLE, true);
@@ -213,10 +229,129 @@ public final class NavHud {
         int y = guiH / 4;
         sink.push();
         sink.translate(0f, 0f, 400f);
-        sink.fill(x, y, x + w, y + h, applyAlpha(BG, alpha));
-        border(sink, x, y, w, h, applyAlpha(ACCENT, alpha));
+        if (isGlass()) {
+            glassPanel(sink, x, y, w, h, alpha);
+        } else {
+            sink.fill(x, y, x + w, y + h, applyAlpha(BG, alpha));
+            border(sink, x, y, w, h, applyAlpha(ACCENT, alpha));
+        }
         sink.text(font, msg, x + w / 2f, y + (h - 8) / 2f, applyAlpha(TITLE, alpha), true);
         sink.pop();
+    }
+
+    // ===== 毛玻璃 =====
+
+    private static boolean isGlass() {
+        return "glass".equals(MtrMapConfig.getMapTheme());
+    }
+
+    /** 与 MapScreen / 网页一致的圆角：配置按像素给，游戏内按 GUI 像素折半 */
+    private static int glassRadius() {
+        return MtrMapConfig.getGlassRadius() / 2;
+    }
+
+    private static int glassTintAlpha() {
+        return (int) Math.round(56 + MtrMapConfig.getGlassOpacity() * 1.15);
+    }
+
+    /**
+     * 毛玻璃面板：外围柔和阴影 → 半透明冷色渐变 → 顶部柔和高光 → 1px 亮边 + 内圈折射亮边。
+     *
+     * <p>所有层的圆角都用同一个 {@link #cornerInset} 逐行收缩，边框和渐变边缘才能对齐。
+     */
+    private static void glassPanel(GuiSink sink, int x, int y, int w, int h, float alpha) {
+        if (w <= 0 || h <= 0) {
+            return;
+        }
+        float a = clamp(alpha, 0f, 1f);
+        int r = Math.max(0, Math.min(glassRadius(), Math.min(w, h) / 2));
+        if (a <= 0f) {
+            return;
+        }
+        // 外围柔和阴影：几层逐渐变淡的圆角矩形
+        for (int i = 3; i >= 1; i--) {
+            int sa = (int) Math.round(11 * a * (4 - i) / 3.0);
+            if (sa > 0) {
+                roundedFill(sink, x - i, y - i + 1, w + i * 2, h + i * 2, r + i, sa << 24);
+            }
+        }
+        int topAlpha = (int) Math.round(glassTintAlpha() * a);
+        int bottomAlpha = Math.min(255, topAlpha + (int) Math.round(26 * a));
+        int hiRows = Math.min(10, Math.max(2, h / 4));
+        for (int row = 0; row < h; row++) {
+            int inset = cornerInset(row, h, r);
+            if (w - inset * 2 < 1) {
+                continue;
+            }
+            double t = h <= 1 ? 0.0 : row / (double) (h - 1);
+            int ca = (int) Math.round(topAlpha + (bottomAlpha - topAlpha) * t);
+            int cr = (int) Math.round(0x14 + (0x1C - 0x14) * t);
+            int cg = (int) Math.round(0x1E + (0x14 - 0x1E) * t);
+            int cb = (int) Math.round(0x36 + (0x40 - 0x36) * t);
+            sink.fill(x + inset, y + row, x + w - inset, y + row + 1,
+                    (ca << 24) | (cr << 16) | (cg << 8) | cb);
+            // 顶部柔和高光：越往下越淡
+            if (row < hiRows) {
+                int ha = (int) Math.round(40 * (1.0 - row / (double) hiRows) * a);
+                if (ha > 0) {
+                    sink.fill(x + inset, y + row, x + w - inset, y + row + 1, (ha << 24) | 0xFFFFFF);
+                }
+            }
+        }
+        // 1px 亮边 + 内圈更淡的折射边（半径同步减 1，与渐变层逐行对齐）
+        roundedBorder(sink, x, y, w, h, r, applyAlpha(0x70FFFFFF, a));
+        if (w > 4 && h > 4) {
+            roundedBorder(sink, x + 1, y + 1, w - 2, h - 2, Math.max(0, r - 1), applyAlpha(0x24FFFFFF, a));
+        }
+    }
+
+    /** 圆角矩形填充：逐行按 cornerInset 收缩（与 MapScreen 的 uiFill 同一套算法） */
+    private static void roundedFill(GuiSink sink, int x, int y, int w, int h, int radius, int color) {
+        if (w <= 0 || h <= 0) {
+            return;
+        }
+        int r = Math.max(0, Math.min(radius, Math.min(w, h) / 2));
+        for (int row = 0; row < h; row++) {
+            int inset = cornerInset(row, h, r);
+            if (w - inset * 2 < 1) {
+                continue;
+            }
+            sink.fill(x + inset, y + row, x + w - inset, y + row + 1, color);
+        }
+    }
+
+    /** 逐行内缩的 1px 圆角描边（与填充共用同一个 inset，圆角处完全重合） */
+    private static void roundedBorder(GuiSink sink, int x, int y, int w, int h, int radius, int color) {
+        if (w <= 0 || h <= 0) {
+            return;
+        }
+        if (radius <= 0) {
+            border(sink, x, y, w, h, color);
+            return;
+        }
+        for (int row = 0; row < h; row++) {
+            int inset = cornerInset(row, h, radius);
+            int left = x + inset;
+            int right = x + w - inset;
+            if (right <= left) {
+                continue;
+            }
+            sink.fill(left, y + row, left + 1, y + row + 1, color);
+            sink.fill(right - 1, y + row, right, y + row + 1, color);
+            if (row == 0 || row == h - 1) {
+                sink.fill(left, y + row, right, y + row + 1, color);
+            }
+        }
+    }
+
+    /** 圆角矩形第 {@code row} 行的左右内缩量（与 MapScreen / GlassBackdrop 一致） */
+    private static int cornerInset(int row, int height, int radius) {
+        int distance = Math.min(row, height - 1 - row);
+        if (radius <= 0 || distance >= radius) {
+            return 0;
+        }
+        double dy = radius - distance - 0.5;
+        return radius - (int) Math.round(Math.sqrt(Math.max(0, radius * (double) radius - dy * dy)));
     }
 
     // ===== 小工具 =====
@@ -233,23 +368,38 @@ public final class NavHud {
         sink.text(font, s, left + font.width(s) / 2f, y, color, true);
     }
 
+    /** 截断结果的缓存：HUD 每帧对同样的字符串调多次 fit，宽度计算在热路径上 */
+    private static final java.util.Map<String, String> FIT_CACHE = new java.util.HashMap<>();
+
     /** 超宽时截断并加省略号 */
     private static String fit(Font font, String s, int maxW) {
         if (s == null) {
             return "";
         }
+        String key = maxW + "\u0000" + s;
+        String cached = FIT_CACHE.get(key);
+        if (cached != null) {
+            return cached;
+        }
+        String result;
         if (font.width(s) <= maxW) {
-            return s;
-        }
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < s.length(); i++) {
-            String next = sb.toString() + s.charAt(i);
-            if (font.width(next + "…") > maxW) {
-                break;
+            result = s;
+        } else {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < s.length(); i++) {
+                String next = sb.toString() + s.charAt(i);
+                if (font.width(next + "…") > maxW) {
+                    break;
+                }
+                sb.append(s.charAt(i));
             }
-            sb.append(s.charAt(i));
+            result = sb + "…";
         }
-        return sb + "…";
+        if (FIT_CACHE.size() > 512) {
+            FIT_CACHE.clear();
+        }
+        FIT_CACHE.put(key, result);
+        return result;
     }
 
     private static String fmtDist(double meters) {

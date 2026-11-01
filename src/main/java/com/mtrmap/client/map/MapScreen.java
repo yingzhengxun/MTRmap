@@ -60,6 +60,23 @@ public class MapScreen extends Screen {
 	private int searchCursor; // 光标位置（在 searchText 中的索引）
 	private int searchIndex;
 	private final List<Object> searchHits = new ArrayList<>();
+	/** 搜索候选的缓存键：搜索文字 / 模式 / 数据版本没变就不重算 */
+	private String searchHitsText;
+	private boolean searchHitsMode;
+	private MapModel searchHitsModel;
+	/** 悬停检测缓存：鼠标没动、数据没换、缩放下半径没变就复用上一次的结果 */
+	private MapModel hoverPickModel;
+	private double hoverPickX = Double.NaN;
+	private double hoverPickY = Double.NaN;
+	private double hoverPickRadius = -1;
+	private MapModel.Station hoverPickStation;
+	private boolean hoverPickValid;
+	/** 站名宽度的缓存（按 station.name 缓存主名/译名宽度），换数据时清空 */
+	private final java.util.Map<String, int[]> nameWidthCache = new java.util.HashMap<>();
+	private MapModel cacheModel;
+	/** 本帧 / 上一帧是否真的画过毛玻璃卡片：只有画过才值得抓屏模糊 */
+	private boolean glassUsedLastFrame;
+	private boolean glassUsedThisFrame;
 
 	// ===== 详情 / 路径 =====
 	private MapModel.Station detailStation;
@@ -82,6 +99,21 @@ public class MapScreen extends Screen {
 	private String routeMessage;
 	private RoutePlanner.StartWalk startWalk;
 	private String lastNavRev;
+	/** 路径面板输入框聚焦：0 = 无，1 = 起点，2 = 终点 */
+	private int routeInputFocus;
+	private String routeStartText = "";
+	private String routeEndText = "";
+	private int routeStartCursor;
+	private int routeEndCursor;
+	private int routeStartIndex;
+	private int routeEndIndex;
+	/** 候选站缓存：输入内容 / 数据变化时才重算，不必每帧过滤全部车站 */
+	private final List<MapModel.Station> routeStartHits = new ArrayList<>();
+	private final List<MapModel.Station> routeEndHits = new ArrayList<>();
+	private String routeStartQuery;
+	private String routeEndQuery;
+	private MapModel routeStartModel;
+	private MapModel routeEndModel;
 	/** 彩蛋全屏标题是否打开 */
 	private boolean eggOpen;
 
@@ -232,6 +264,13 @@ public class MapScreen extends Screen {
 	@Override
 	public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
 		MapModel model = MapDataClient.model();
+		if (model != cacheModel) {
+			// 数据快照换了：站名宽度、悬停命中这些按旧模型算的都失效
+			cacheModel = model;
+			nameWidthCache.clear();
+			hoverPickValid = false;
+		}
+		glassUsedThisFrame = false;
 		if (!viewInitialized && model.loaded) {
 			// 首次打开时数据还在路上，视野适配要等数据到了再做，否则会把镜头定在原点
 			viewInitialized = true;
@@ -257,8 +296,10 @@ public class MapScreen extends Screen {
 			drawRouteSelection(sink, model);
 		}
 
-		// 毛玻璃：地图已经画进 framebuffer，先提交顶点，再抓一份背景做模糊
-		if (isGlassStyle()) {
+		// 毛玻璃：地图已经画进 framebuffer，先提交顶点，再抓一份背景做模糊。
+		// 只有上一帧真的画过玻璃卡片时才值得抓屏（抓屏 + CPU 模糊代价很高）；
+		// 第一帧没有模糊纹理时玻璃卡片自动退回半透明填充，看不出来。
+		if (isGlassStyle() && glassUsedLastFrame) {
 			sink.flush();
 			GlassBackdrop.capture(width, height);
 		}
@@ -276,6 +317,7 @@ public class MapScreen extends Screen {
 		drawEggOverlay(sink);
 		drawToast(sink);
 		drawConnectionHint(sink, model);
+		glassUsedLastFrame = glassUsedThisFrame;
 		// 不调用 super.render：原版 Screen.render 会画一遍背景/组件，把地图盖掉。
 		// 本窗口没有任何原版控件，绘制全部由上面的 GuiSink 完成。
 	}
@@ -425,8 +467,21 @@ public class MapScreen extends Screen {
 		drawStationNames(sink, model, radius, true, placed);
 		drawStationNames(sink, model, radius, false, placed);
 
-		// 悬停：找鼠标附近的车站
-		MapModel.Station hovered = pickStation(model, mouseX, mouseY, radius);
+		// 悬停：找鼠标附近的车站。
+		// pickStation 要遍历全部车站（含胶囊距离计算），鼠标没动时没必要重算。
+		MapModel.Station hovered;
+		if (hoverPickValid && model == hoverPickModel && mouseX == hoverPickX
+				&& mouseY == hoverPickY && radius == hoverPickRadius) {
+			hovered = hoverPickStation;
+		} else {
+			hovered = pickStation(model, mouseX, mouseY, radius);
+			hoverPickModel = model;
+			hoverPickX = mouseX;
+			hoverPickY = mouseY;
+			hoverPickRadius = radius;
+			hoverPickStation = hovered;
+			hoverPickValid = true;
+		}
 		if (hovered != null) {
 			hoverText = stationLabel(hovered);
 			hoverX = mouseX + 10;
@@ -459,8 +514,8 @@ public class MapScreen extends Screen {
 				labelX = worldToScreenX(station.x);
 				labelTop = worldToScreenY(station.z) - radius;
 			}
-			int mainW = font.width(n[0]);
-			int transW = n[1].isEmpty() ? 0 : Math.round(font.width(n[1]) * 0.7f);
+			int mainW = nameWidth(station.name, true);
+			int transW = n[1].isEmpty() ? 0 : Math.round(nameWidth(station.name, false) * 0.7f);
 			int w = Math.max(mainW, transW);
 			int baseline = (int) (labelTop - 4);
 			int left = (int) (labelX - w / 2.0 - 2);
@@ -478,6 +533,20 @@ public class MapScreen extends Screen {
 		}
 	}
 
+	/** 站名宽度（主名 / 译名）按 name 缓存：drawStationNames 每帧对每个车站都要算两次 */
+	private int nameWidth(String name, boolean main) {
+		int[] cached = nameWidthCache.get(name);
+		if (cached == null) {
+			String[] n = MapModel.splitName(name);
+			cached = new int[]{font.width(n[0]), n[1].isEmpty() ? 0 : font.width(n[1])};
+			if (nameWidthCache.size() > 4096) {
+				nameWidthCache.clear();
+			}
+			nameWidthCache.put(name, cached);
+		}
+		return main ? cached[0] : cached[1];
+	}
+
 	private boolean overlaps(List<int[]> placed, int left, int right, int top, int bottom) {
 		for (int[] r : placed) {
 			if (left < r[1] && right > r[0] && top < r[3] && bottom > r[2]) {
@@ -487,7 +556,15 @@ public class MapScreen extends Screen {
 		return false;
 	}
 
-	/** 换乘站胶囊几何：{cx, cy, r, half, vertical(1/0)} */
+	/**
+	 * 换乘站胶囊几何：{cx, cy, r, half, vertical(1/0)}。
+	 *
+	 * <p>{@code cx/cy} 是「全部站台中心包围盒」的中心 —— 注意不是 {@code station.x/z}：
+	 * 那只是某一条线路的站台中点，宽站上会偏到胶囊的一头。
+	 *
+	 * <p>画胶囊（{@link #drawCapsule}）、命中（{@link #markerDistance}）、站名定位、
+	 * 起终点标记与高亮全部只走这一个函数，避免「画出来的胶囊」和「能点的胶囊」两套算错位。
+	 */
 	private double[] capsule(MapModel.Station station, double minThick) {
 		if (!station.hasBounds()) {
 			return null;
@@ -501,10 +578,26 @@ public class MapScreen extends Screen {
 		double w = Math.abs(x2 - x1);
 		double h = Math.abs(y2 - y1);
 		boolean vertical = h > w;
+		// 短边至少要有普通车站那么粗（minThick = 直径），保证缩得很小时也还点得中
 		double r = Math.max(minThick / 2, (vertical ? w : h) / 2);
-		double half = Math.max((vertical ? h : w) / 2 - r, r * 0.8);
+		// 长边两端各扣掉一个圆头半径；长边不足一个直径时退化成圆（贴近包围盒，不再硬拉长）
+		double half = Math.max((vertical ? h : w) / 2 - r, 0);
 		return new double[]{cx, cy, r, half, vertical ? 1 : 0};
 	}
+
+	/** 换乘站的胶囊；不是换乘站 / 没有包围盒时返回 null */
+	private double[] capsuleOf(MapModel.Station station) {
+		if (station == null || !station.isInterchange() || !station.hasBounds()) {
+			return null;
+		}
+		return capsule(station, stationRadius() * 2);
+	}
+
+	/** 把胶囊按 {@code grow} 像素向外扩一圈（高亮 / 标记用，保证描边不会被胶囊本体盖住） */
+	private static double[] growCapsule(double[] capsule, double grow) {
+		return new double[]{capsule[0], capsule[1], capsule[2] + grow, capsule[3], capsule[4]};
+	}
+
 
 	private void drawTrains(GuiSink sink, MapModel model) {
 		double size = Math.max(7, 11 * Math.sqrt(scale));
@@ -544,10 +637,17 @@ public class MapScreen extends Screen {
 
 	private void drawHighlight(GuiSink sink, MapModel model) {
 		if (detailStation != null) {
-			double cx = worldToScreenX(detailStation.x);
-			double cy = worldToScreenY(detailStation.z);
-			double r = Math.max(6, 9 * Math.sqrt(scale)) + 4;
-			disc(sink, cx, cy, r, 0x00000000, 0xFFFFD040, 3);
+			// 换乘站沿整条胶囊描边；普通车站仍是圆环
+			double[] capsule = capsuleOf(detailStation);
+			if (capsule != null) {
+				double grow = Math.max(2, 4 * Math.sqrt(scale)) + 1;
+				drawCapsule(sink, growCapsule(capsule, grow), 0x00000000, 0xFFFFD040, 3);
+			} else {
+				double cx = worldToScreenX(detailStation.x);
+				double cy = worldToScreenY(detailStation.z);
+				double r = Math.max(6, 9 * Math.sqrt(scale)) + 4;
+				disc(sink, cx, cy, r, 0x00000000, 0xFFFFD040, 3);
+			}
 		}
 		if (detailRoute != null) {
 			int base = (int) Math.max(2, 4 * Math.sqrt(scale));
@@ -580,12 +680,22 @@ public class MapScreen extends Screen {
 			marker(sink, end, 0xFFFF6B6B, s("终", "B"));
 		}
 		if (hasMyLocation && start != null && routeFromMyLocation) {
-			line(sink, worldToScreenX(myX), worldToScreenY(myZ),
-					worldToScreenX(start.x), worldToScreenY(start.z), 0xCC9AA0A6, 2);
+			double[] startCapsule = capsuleOf(start);
+			double sx = startCapsule != null ? startCapsule[0] : worldToScreenX(start.x);
+			double sy = startCapsule != null ? startCapsule[1] : worldToScreenY(start.z);
+			line(sink, worldToScreenX(myX), worldToScreenY(myZ), sx, sy, 0xCC9AA0A6, 2);
 		}
 	}
 
 	private void marker(GuiSink sink, MapModel.Station station, int color, String label) {
+		// 换乘站把起终点标记铺满整条胶囊（不是只在 station.x/z 那个点上画一个圆）
+		double[] capsule = capsuleOf(station);
+		if (capsule != null) {
+			double grow = Math.max(2, 2 * Math.sqrt(scale));
+			drawCapsule(sink, growCapsule(capsule, grow), alpha(color, 0.85f), 0xFFFFFFFF, 2);
+			sink.text(font, label, (float) capsule[0], (float) (capsule[1] - 4), 0xFF101018, false);
+			return;
+		}
 		double cx = worldToScreenX(station.x);
 		double cy = worldToScreenY(station.z);
 		double r = Math.max(7, 10 * Math.sqrt(scale));
@@ -860,27 +970,27 @@ public class MapScreen extends Screen {
 
 	// ===== 路径查询面板 =====
 
+	private static final int ROUTE_FIELD_H = 14;
+	/** 路径候选每行的高度（与左侧搜索候选同一套观感，面板窄一些所以略矮） */
+	private static final int ROUTE_CAND_H = 14;
+	/** 候选最多显示 8 条 */
+	private static final int ROUTE_MAX_HITS = 8;
+
+	/** 右侧详情 / 路径面板的左边界 */
+	private int panelX() {
+		return width - 8 - TOOL_W - 6 - PANEL_W;
+	}
+
 	private void drawRoutePanel(GuiSink sink, int mouseX, int mouseY) {
 		if (!routeMode) {
 			return;
 		}
 		MapModel model = MapDataClient.model();
+		updateRouteHits(model);
 		int w = PANEL_W;
-		int x = width - 8 - TOOL_W - 6 - w;
+		int x = panelX();
 		int y = routePanelY();
 		List<String> lines = new ArrayList<>();
-		String head = s("路径查询", "Route planner");
-		String hint;
-		if (routeStartId < 0) {
-			hint = s("请选择起点", "Pick the start");
-		} else if (routeEndId < 0) {
-			hint = s("请选择终点", "Pick the destination");
-		} else {
-			MapModel.Station a = model.station(routeStartId);
-			MapModel.Station b = model.station(routeEndId);
-			hint = s("起点：", "From: ") + (a == null ? "-" : stationLabel(a))
-					+ s("　终点：", "  To: ") + (b == null ? "-" : stationLabel(b));
-		}
 		if (startWalk != null) {
 			String dir = startWalk.dirIndex == null ? "" : RoutePlanner.DIRECTIONS[startWalk.dirIndex];
 			lines.add(s("从我的位置往" + dir + "步行 " + Math.round(startWalk.dist) + " 米到起点",
@@ -893,16 +1003,22 @@ public class MapScreen extends Screen {
 				: routeOptions.get(Math.min(activeRouteTab, routeOptions.size() - 1));
 		// 步骤行数封顶：面板再高就要超出小窗口了（极复杂的换乘方案只显示前 7 步）
 		int shownSteps = visibleStepCount();
-		// 面板高度必须与下面的绘制顺序对齐：
-		// 标题 4 / 提示 17 / 按钮行 29(高 13) / 若干提示行 / 方案标签页 11+2 / 概要 11 / 每步 18
+		// 面板高度必须与绘制顺序严格对齐：
+		// 标题 16 / 起点终点两个输入框 / 候选列表 / 按钮行 / 提示行 / 标签页 13 / 概要 11 / 每步 STEP_H
 		int h = routePanelHeight();
 		panel(sink, x, y, w, h);
-		sink.textLeft(font, head, x + 6, y + 4, textColor(), false);
+		sink.textLeft(font, s("路径查询", "Route planner"), x + 6, y + 4, textColor(), false);
 		sink.textLeft(font, "×", x + w - 11, y + 4, dimColor(), false);
-		sink.textLeft(font, fit(hint, w - 12), x + 6, y + 17, dimColor(), false);
+		// 两个可编辑输入框（点击进入编辑态，下方弹出候选站）
+		drawRouteField(sink, model, 1, s("起点站名", "From station"),
+				routeStartText, routeStartCursor, routeStartId);
+		drawRouteField(sink, model, 2, s("终点站名", "To station"),
+				routeEndText, routeEndCursor, routeEndId);
+		// 候选列表画在面板底色之上，不会被面板本身盖住
+		drawRouteCandidates(sink);
 
 		// 按钮行：立即查询 / 清除 / 我的位置
-		int by = y + 29;
+		int by = routeButtonsY();
 		int bh = 13;
 		int bw = (w - 15) / 3;
 		String[] labels = {s("立即查询", "Search"), s("清除", "Clear"), s("📍我的位置", "📍My location")};
@@ -916,7 +1032,7 @@ public class MapScreen extends Screen {
 			uiBorder(sink, bx, by, bw, bh, themeColor(0xFF3A3A4A, 0xFFBBBBCC));
 			sink.text(font, fit(labels[i], bw - 4), bx + bw / 2f, by + 3, enabled ? textColor() : dimColor(), false);
 		}
-		int cy = by + 18;
+		int cy = by + 17;
 		for (String line : lines) {
 			sink.textLeft(font, fit(line, w - 12), x + 6, cy, dimColor(), false);
 			cy += LINE_H;
@@ -960,6 +1076,314 @@ public class MapScreen extends Screen {
 			}
 			cy += STEP_H;
 		}
+	}
+
+	/** 路径面板第 {@code field} 个输入框（1 = 起点、2 = 终点）的顶部 y */
+	private int routeFieldY(int field) {
+		return routePanelY() + 16 + (field - 1) * (ROUTE_FIELD_H + 2);
+	}
+
+	/** 候选列表顶部 y：两个输入框下面 */
+	private int routeCandidateTop() {
+		return routeFieldY(2) + ROUTE_FIELD_H + 2;
+	}
+
+	private List<MapModel.Station> routeHits(int field) {
+		return field == 1 ? routeStartHits : routeEndHits;
+	}
+
+	private int routeCandidateCount() {
+		if (routeInputFocus == 0) {
+			return 0;
+		}
+		return Math.min(ROUTE_MAX_HITS, routeHits(routeInputFocus).size());
+	}
+
+	/** 候选区高度（含「无匹配结果」一行）；没聚焦时为 0 */
+	private int routeCandidateHeight() {
+		if (routeInputFocus == 0) {
+			return 0;
+		}
+		int rows = routeCandidateCount();
+		if (rows > 0) {
+			return rows * ROUTE_CAND_H;
+		}
+		return routeText(routeInputFocus).trim().isEmpty() ? 0 : ROUTE_CAND_H;
+	}
+
+	/** 按钮行顶部 y：候选列表下面（没候选时紧跟输入框） */
+	private int routeButtonsY() {
+		return routeCandidateTop() + routeCandidateHeight() + 2;
+	}
+
+	private String routeText(int field) {
+		return field == 1 ? routeStartText : routeEndText;
+	}
+
+	private int routeCursor(int field) {
+		return field == 1 ? routeStartCursor : routeEndCursor;
+	}
+
+	private void setRouteText(int field, String text, int cursor) {
+		if (field == 1) {
+			routeStartText = text;
+			routeStartCursor = cursor;
+		} else {
+			routeEndText = text;
+			routeEndCursor = cursor;
+		}
+	}
+
+	private int routeSelectedIndex() {
+		return routeInputFocus == 1 ? routeStartIndex : routeEndIndex;
+	}
+
+	private void setRouteSelectedIndex(int index) {
+		if (routeInputFocus == 1) {
+			routeStartIndex = index;
+		} else {
+			routeEndIndex = index;
+		}
+	}
+
+	/** 输入框聚焦（两个框互斥）：把当前站名放进框里，并算一次候选 */
+	private void focusRouteField(int field) {
+		MapModel model = MapDataClient.model();
+		routeInputFocus = field;
+		MapModel.Station station = model.station(field == 1 ? routeStartId : routeEndId);
+		String text = station == null ? "" : stationLabel(station);
+		setRouteText(field, text, text.length());
+		setRouteSelectedIndex(0);
+		if (field == 1) {
+			routeStartQuery = null;
+		} else {
+			routeEndQuery = null;
+		}
+		updateRouteHits(model);
+	}
+
+	/** 清空候选缓存（选中 / 失焦 / 关面板时调用） */
+	private void clearRouteHits() {
+		routeStartHits.clear();
+		routeEndHits.clear();
+		routeStartQuery = null;
+		routeEndQuery = null;
+		routeStartModel = null;
+		routeEndModel = null;
+	}
+
+	/**
+	 * 只在输入内容或数据版本变化时重算候选。
+	 *
+	 * <p>以前每帧都把全部车站过滤一遍，输入框聚焦时面板每帧都要跑上千次字符串比较。
+	 */
+	private void updateRouteHits(MapModel model) {
+		if (routeInputFocus == 0) {
+			return;
+		}
+		if (routeInputFocus == 1) {
+			if (model == routeStartModel && routeStartQuery != null && routeStartQuery.equals(routeStartText)) {
+				return;
+			}
+			fillRouteHits(routeStartHits, model, routeStartText);
+			routeStartModel = model;
+			routeStartQuery = routeStartText;
+		} else {
+			if (model == routeEndModel && routeEndQuery != null && routeEndQuery.equals(routeEndText)) {
+				return;
+			}
+			fillRouteHits(routeEndHits, model, routeEndText);
+			routeEndModel = model;
+			routeEndQuery = routeEndText;
+		}
+	}
+
+	/** 按站名（主名 / 译名，大小写不敏感、包含匹配）过滤候选站，最多 ROUTE_MAX_HITS 条 */
+	private static void fillRouteHits(List<MapModel.Station> out, MapModel model, String text) {
+		out.clear();
+		String query = text == null ? "" : text.trim().toLowerCase();
+		if (query.isEmpty()) {
+			return;
+		}
+		for (MapModel.Station station : model.stations) {
+			String[] n = MapModel.splitName(station.name);
+			if (matches(n[0], query) || matches(n[1], query)) {
+				out.add(station);
+				if (out.size() >= ROUTE_MAX_HITS) {
+					break;
+				}
+			}
+		}
+	}
+
+	private void drawRouteField(GuiSink sink, MapModel model, int field, String placeholder,
+			String text, int cursor, long id) {
+		int x = panelX();
+		int y = routeFieldY(field);
+		int fx = x + 6;
+		int fw = PANEL_W - 12;
+		boolean focused = routeInputFocus == field;
+		uiFill(sink, fx, y, fx + fw, y + ROUTE_FIELD_H, surfaceColor(0xFF242434, 0xFFF3F3FA));
+		uiBorder(sink, fx, y, fw, ROUTE_FIELD_H, focused ? 0xFF7EC8E3 : themeColor(0xFF3A3A4A, 0xFFBBBBCC));
+		String shown = focused ? text : stationLabel(model.station(id));
+		boolean empty = shown == null || shown.isEmpty();
+		if (empty) {
+			shown = placeholder;
+		}
+		sink.textLeft(font, fit(shown, fw - 6), fx + 3, y + 3,
+				empty ? dimColor() : textColor(), false);
+		if (focused) {
+			int caret = fx + 3 + font.width(text.substring(0, Math.min(cursor, text.length())));
+			sink.fill(caret, y + 3, caret + 1, y + ROUTE_FIELD_H - 2, textColor());
+		}
+	}
+
+	/** 候选站下拉：样式与左侧搜索结果一致（色块 + 站名） */
+	private void drawRouteCandidates(GuiSink sink) {
+		if (routeInputFocus == 0) {
+			return;
+		}
+		int x = panelX();
+		int w = PANEL_W;
+		int top = routeCandidateTop();
+		List<MapModel.Station> hits = routeHits(routeInputFocus);
+		int rows = routeCandidateCount();
+		if (rows == 0) {
+			if (!routeText(routeInputFocus).trim().isEmpty()) {
+				sink.textLeft(font, s("无匹配结果", "No results"), x + 9, top + 3, dimColor(), false);
+			}
+			return;
+		}
+		int selected = routeSelectedIndex();
+		for (int i = 0; i < rows; i++) {
+			MapModel.Station station = hits.get(i);
+			int ry = top + i * ROUTE_CAND_H;
+			if (i == selected) {
+				uiFill(sink, x + 7, ry, x + w - 7, ry + ROUTE_CAND_H - 1,
+						surfaceColor(0xFF35405C, 0xFFD6E4FF));
+			}
+			sink.fill(x + 9, ry + 4, x + 15, ry + 10, alpha(station.color, 1f));
+			sink.textLeft(font, fit(hitLabel(station), w - 28), x + 18, ry + 3, textColor(), false);
+		}
+	}
+
+	/** 选中当前高亮的候选站：写回起终站，两个都齐了就自动查询 */
+	private void applyRouteCandidate() {
+		if (routeInputFocus == 0) {
+			return;
+		}
+		List<MapModel.Station> hits = routeHits(routeInputFocus);
+		int index = routeSelectedIndex();
+		if (index < 0 || index >= hits.size()) {
+			return;
+		}
+		MapModel.Station station = hits.get(index);
+		if (routeInputFocus == 1) {
+			routeStartId = station.id;
+			routeStartText = stationLabel(station);
+			routeStartCursor = routeStartText.length();
+		} else {
+			routeEndId = station.id;
+			routeEndText = stationLabel(station);
+			routeEndCursor = routeEndText.length();
+		}
+		routeFromMyLocation = false;
+		routeInputFocus = 0;
+		clearRouteHits();
+		if (routeStartId >= 0 && routeEndId >= 0) {
+			computeRoutes();
+		}
+	}
+
+	/** 清掉起点终点与面板状态（清除按钮 / 退出路径模式） */
+	private void resetRoute() {
+		routeStartId = -1;
+		routeEndId = -1;
+		routeOptions = new ArrayList<>();
+		routeMessage = null;
+		startWalk = null;
+		routeFromMyLocation = false;
+		routeInputFocus = 0;
+		routeStartText = "";
+		routeEndText = "";
+		routeStartCursor = 0;
+		routeEndCursor = 0;
+		clearRouteHits();
+	}
+
+	/** 路径输入框的按键处理；返回 true 表示已消费 */
+	private boolean handleRouteKey(int keyCode) {
+		if (routeInputFocus == 0) {
+			return false;
+		}
+		String text = routeText(routeInputFocus);
+		int cursor = routeCursor(routeInputFocus);
+		if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+			routeInputFocus = 0;
+			clearRouteHits();
+			return true;
+		}
+		if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
+			applyRouteCandidate();
+			return true;
+		}
+		if (keyCode == GLFW.GLFW_KEY_BACKSPACE) {
+			if (cursor > 0) {
+				setRouteText(routeInputFocus, text.substring(0, cursor - 1) + text.substring(cursor), cursor - 1);
+				setRouteSelectedIndex(0);
+			}
+			return true;
+		}
+		if (keyCode == GLFW.GLFW_KEY_DELETE) {
+			if (cursor < text.length()) {
+				setRouteText(routeInputFocus, text.substring(0, cursor) + text.substring(cursor + 1), cursor);
+				setRouteSelectedIndex(0);
+			}
+			return true;
+		}
+		if (keyCode == GLFW.GLFW_KEY_LEFT) {
+			setRouteText(routeInputFocus, text, Math.max(0, cursor - 1));
+			return true;
+		}
+		if (keyCode == GLFW.GLFW_KEY_RIGHT) {
+			setRouteText(routeInputFocus, text, Math.min(text.length(), cursor + 1));
+			return true;
+		}
+		int rows = routeCandidateCount();
+		if (keyCode == GLFW.GLFW_KEY_DOWN && rows > 0) {
+			setRouteSelectedIndex(Math.min(routeSelectedIndex() + 1, rows - 1));
+			return true;
+		}
+		if (keyCode == GLFW.GLFW_KEY_UP && rows > 0) {
+			setRouteSelectedIndex(Math.max(routeSelectedIndex() - 1, 0));
+			return true;
+		}
+		if (isPasteCombo(keyCode)) {
+			String clipboard = asciiOnly(Minecraft.getInstance().keyboardHandler.getClipboard());
+			if (!clipboard.isEmpty()) {
+				setRouteText(routeInputFocus,
+						text.substring(0, cursor) + clipboard + text.substring(cursor), cursor + clipboard.length());
+				setRouteSelectedIndex(0);
+			}
+			return true;
+		}
+		// 焦点在输入框时吞掉其它键，避免触发原版快捷键
+		return true;
+	}
+
+	/** 输入框只收可见 ASCII（中文站名走候选选择） */
+	private static String asciiOnly(String text) {
+		if (text == null) {
+			return "";
+		}
+		StringBuilder sb = new StringBuilder();
+		for (int i = 0; i < text.length(); i++) {
+			char c = text.charAt(i);
+			if (c >= 32 && c <= 126) {
+				sb.append(c);
+			}
+		}
+		return sb.toString();
 	}
 
 	/** 路径面板的顶部 y：紧跟在详情面板下面 */
@@ -1418,14 +1842,21 @@ public class MapScreen extends Screen {
 			detailRoute = null;
 			return;
 		}
+		// 在地图上点站：输入框退出编辑态，候选清空
+		routeInputFocus = 0;
+		clearRouteHits();
 		if (routeStartId < 0) {
 			routeStartId = station.id;
 			routeFromMyLocation = false;
+			routeStartText = stationLabel(station);
+			routeStartCursor = routeStartText.length();
 		} else if (routeEndId < 0) {
 			if (station.id == routeStartId) {
 				return;
 			}
 			routeEndId = station.id;
+			routeEndText = stationLabel(station);
+			routeEndCursor = routeEndText.length();
 			computeRoutes();
 		} else {
 			// 起点、终点都已选好时，点第三站才开始新一次查询；
@@ -1435,6 +1866,10 @@ public class MapScreen extends Screen {
 			}
 			routeStartId = station.id;
 			routeEndId = -1;
+			routeStartText = stationLabel(station);
+			routeStartCursor = routeStartText.length();
+			routeEndText = "";
+			routeEndCursor = 0;
 			routeOptions = new ArrayList<>();
 			routeMessage = null;
 			startWalk = null;
@@ -1443,6 +1878,14 @@ public class MapScreen extends Screen {
 	}
 
 	private void updateSearchHits(MapModel model) {
+		// 只有搜索文字 / 模式 / 数据版本变了才重算：面板每帧都会调用它
+		if (model == searchHitsModel && searchHitsMode == searchRouteMode && searchHitsText != null
+				&& searchHitsText.equals(searchText)) {
+			return;
+		}
+		searchHitsModel = model;
+		searchHitsMode = searchRouteMode;
+		searchHitsText = searchText;
 		searchHits.clear();
 		String query = searchText.trim().toLowerCase();
 		if (query.isEmpty()) {
@@ -1674,6 +2117,10 @@ public class MapScreen extends Screen {
 		}
 		routeStartId = nearest.id;
 		routeFromMyLocation = true;
+		routeStartText = stationLabel(nearest);
+		routeStartCursor = routeStartText.length();
+		routeInputFocus = 0;
+		clearRouteHits();
 		if (routeEndId >= 0) {
 			computeRoutes();
 		} else {
@@ -1842,6 +2289,10 @@ public class MapScreen extends Screen {
 			tripsOpen = false;
 			return true;
 		}
+		// 路径面板输入框的焦点优先于左侧搜索框
+		if (routeMode && routeInputFocus != 0 && handleRouteKey(keyCode)) {
+			return true;
+		}
 		if (searchFocused) {
 			if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
 				searchFocused = false;
@@ -1899,6 +2350,25 @@ public class MapScreen extends Screen {
 
 	@Override
 	public boolean charTyped(char codePoint, int modifiers) {
+		if (routeInputFocus != 0) {
+			// 只收可见 ASCII：中文站名通过候选列表选择，避免输入法 / 控制字符混进来
+			if (codePoint < 32 || codePoint > 126) {
+				return true;
+			}
+			String text = routeText(routeInputFocus);
+			int cursor = routeCursor(routeInputFocus);
+			MapModel.Station selected = MapDataClient.model()
+					.station(routeInputFocus == 1 ? routeStartId : routeEndId);
+			// 框里还是「上一次选中的站名」时直接开始新的输入（相当于全选覆盖）
+			if (selected != null && cursor == text.length() && text.equals(stationLabel(selected))) {
+				text = "";
+				cursor = 0;
+			}
+			setRouteText(routeInputFocus,
+					text.substring(0, cursor) + codePoint + text.substring(cursor), cursor + 1);
+			setRouteSelectedIndex(0);
+			return true;
+		}
 		if (searchFocused && codePoint >= 32 && codePoint != 127) {
 			searchText = searchText.substring(0, searchCursor) + codePoint + searchText.substring(searchCursor);
 			searchCursor++;
@@ -1918,9 +2388,17 @@ public class MapScreen extends Screen {
 
 	private boolean routePanelHit(double mouseX, double mouseY) {
 		int w = PANEL_W;
-		int x = width - 8 - TOOL_W - 6 - w;
+		int x = panelX();
 		int y = routePanelY();
-		if (mouseX < x || mouseX > x + w || mouseY < y || mouseY > y + routePanelHeight()) {
+		int h = routePanelHeight();
+		boolean inside = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h;
+		if (!inside) {
+			// 点面板外：先退出输入态（这一下只用来退出，不穿透去选站）
+			if (routeInputFocus != 0) {
+				routeInputFocus = 0;
+				clearRouteHits();
+				return true;
+			}
 			return false;
 		}
 		// 关闭
@@ -1928,8 +2406,28 @@ public class MapScreen extends Screen {
 			setRouteMode(false);
 			return true;
 		}
-		// 按钮行
-		int by = y + 29;
+		// 起点 / 终点输入框：互斥聚焦
+		for (int field = 1; field <= 2; field++) {
+			int fy = routeFieldY(field);
+			if (mouseY >= fy && mouseY <= fy + ROUTE_FIELD_H && mouseX >= x + 6 && mouseX <= x + w - 6) {
+				focusRouteField(field);
+				return true;
+			}
+		}
+		updateRouteHits(MapDataClient.model());
+		// 候选列表
+		int rows = routeCandidateCount();
+		if (rows > 0) {
+			int top = routeCandidateTop();
+			if (mouseY >= top && mouseY < top + rows * ROUTE_CAND_H
+					&& mouseX >= x + 6 && mouseX <= x + w - 6) {
+				setRouteSelectedIndex((int) ((mouseY - top) / ROUTE_CAND_H));
+				applyRouteCandidate();
+				return true;
+			}
+		}
+		// 按钮行：立即查询 / 清除 / 我的位置（清除会同时清掉输入框文字与候选）
+		int by = routeButtonsY();
 		if (mouseY >= by && mouseY <= by + 13) {
 			int bw = (w - 15) / 3;
 			int index = (int) ((mouseX - x - 6) / (bw + 3));
@@ -1937,12 +2435,7 @@ public class MapScreen extends Screen {
 				if (index == 0) {
 					computeRoutes();
 				} else if (index == 1) {
-					routeStartId = -1;
-					routeEndId = -1;
-					routeOptions = new ArrayList<>();
-					routeMessage = null;
-					startWalk = null;
-					routeFromMyLocation = false;
+					resetRoute();
 				} else {
 					useMyLocation();
 				}
@@ -1951,7 +2444,7 @@ public class MapScreen extends Screen {
 		}
 		// 方案标签页
 		if (!routeOptions.isEmpty()) {
-			int tabsY = by + 18 + panelLinesHeight();
+			int tabsY = by + 17 + panelLinesHeight();
 			if (mouseY >= tabsY && mouseY <= tabsY + 11) {
 				int tabW = (w - 12) / routeOptions.size();
 				int index = (int) ((mouseX - x - 6) / tabW);
@@ -1962,6 +2455,11 @@ public class MapScreen extends Screen {
 				}
 				return true;
 			}
+		}
+		// 点面板空白：取消输入聚焦
+		if (routeInputFocus != 0) {
+			routeInputFocus = 0;
+			clearRouteHits();
 		}
 		return true;
 	}
@@ -1978,12 +2476,13 @@ public class MapScreen extends Screen {
 		return lines * LINE_H;
 	}
 
-	/** 路径面板高度（画与点击必须用同一个值） */
+	/** 路径面板高度（画与点击必须用同一个值）：标题 + 两个输入框 + 候选 + 按钮 + 提示 + 方案 */
 	private int routePanelHeight() {
-		if (routeOptions.isEmpty()) {
-			return 53 + panelLinesHeight();
+		int h = routeButtonsY() - routePanelY() + 17 + panelLinesHeight();
+		if (!routeOptions.isEmpty()) {
+			h += 13 + 11 + visibleStepCount() * STEP_H;
 		}
-		return 74 + panelLinesHeight() + visibleStepCount() * STEP_H;
+		return h + 4;
 	}
 
 	private void onToolbar(String id) {
@@ -2043,12 +2542,7 @@ public class MapScreen extends Screen {
 	private void setRouteMode(boolean on) {
 		routeMode = on;
 		if (!on) {
-			routeStartId = -1;
-			routeEndId = -1;
-			routeOptions = new ArrayList<>();
-			routeMessage = null;
-			startWalk = null;
-			routeFromMyLocation = false;
+			resetRoute();
 		}
 	}
 
@@ -2076,6 +2570,7 @@ public class MapScreen extends Screen {
 			return;
 		}
 		int r = Math.min(glassRadius(), Math.min(w, h) / 2);
+		glassUsedThisFrame = true;
 		// 悬浮阴影：越靠外越淡
 		uiFill(sink, x - 4, y - 3, x + w + 4, y + h + 5, 0x14000000);
 		uiFill(sink, x - 2, y - 2, x + w + 2, y + h + 3, 0x1E000000);
@@ -2091,10 +2586,12 @@ public class MapScreen extends Screen {
 		glassGradient(sink, x, y, w, h, r, topAlpha, 0x121A2E, bottomAlpha, 0x1C1436);
 		glassHighlight(sink, x, y, w, h, r);
 		glassSheen(sink, x, y, w, h, r);
-		// 外圈 1px 亮边（模拟玻璃厚度）+ 内侧一圈更淡的折射边
-		uiBorderRaw(sink, x, y, w, h, 0x70FFFFFF);
+		// 外圈 1px 亮边（模拟玻璃厚度）+ 内侧一圈更淡的折射边。
+		// 两圈都用「逐行 cornerInset」描边，并与 GlassBackdrop 的模糊层共用同一半径算法；
+		// 内圈半径同步减 1，才不会出现「边框圆角比模糊层圆角更方 / 更圆」的错位。
+		uiBorderRound(sink, x, y, w, h, r, 0x70FFFFFF);
 		if (w > 4 && h > 4) {
-			uiBorderRaw(sink, x + 1, y + 1, w - 2, h - 2, 0x24FFFFFF);
+			uiBorderRound(sink, x + 1, y + 1, w - 2, h - 2, Math.max(0, r - 1), 0x24FFFFFF);
 		}
 	}
 
@@ -2251,12 +2748,7 @@ public class MapScreen extends Screen {
 			return;
 		}
 		for (int row = 0; row < h; row++) {
-			int inset = 0;
-			int cornerRow = row < r ? row : (row >= h - r ? h - 1 - row : -1);
-			if (cornerRow >= 0 && cornerRow < r) {
-				double dy = r - cornerRow - 0.5;
-				inset = r - (int) Math.round(Math.sqrt(Math.max(0, r * (double) r - dy * dy)));
-			}
+			int inset = cornerInset(row, h, r);
 			sink.fill(x + inset, y + row, x2 - inset, y + row + 1, color);
 		}
 	}
@@ -2284,18 +2776,38 @@ public class MapScreen extends Screen {
 
 	private void uiBorderRaw(GuiSink sink, int x, int y, int w, int h, int color) {
 		int r = isGlassStyle() ? Math.min(glassRadius(), Math.min(w, h) / 2) : 0;
+		uiBorderRound(sink, x, y, w, h, r, color);
+	}
+
+	/**
+	 * 逐行内缩的 1px 圆角描边。
+	 *
+	 * <p>圆角段以前用 strokeArc 画成 16 段折线，而填充 / 模糊层用的是逐行 cornerInset：
+	 * 折线宽度压在边界上、像素也对不齐，看起来就是「卡片边框与模糊层圆角没对上」。
+	 * 现在边框与填充共用同一个 cornerInset，圆角处完全重合。
+	 */
+	private void uiBorderRound(GuiSink sink, int x, int y, int w, int h, int r, int color) {
+		if (w <= 0 || h <= 0) {
+			return;
+		}
 		if (r <= 0) {
 			border(sink, x, y, w, h, color);
 			return;
 		}
-		sink.fill(x + r, y, x + w - r, y + 1, color);
-		sink.fill(x + r, y + h - 1, x + w - r, y + h, color);
-		sink.fill(x, y + r, x + 1, y + h - r, color);
-		sink.fill(x + w - 1, y + r, x + w, y + h - r, color);
-		strokeArc(sink, x + r, y + r, r, Math.PI, Math.PI * 1.5, color, 1);
-		strokeArc(sink, x + w - r, y + r, r, Math.PI * 1.5, Math.PI * 2, color, 1);
-		strokeArc(sink, x + r, y + h - r, r, Math.PI / 2, Math.PI, color, 1);
-		strokeArc(sink, x + w - r, y + h - r, r, 0, Math.PI / 2, color, 1);
+		for (int row = 0; row < h; row++) {
+			int inset = cornerInset(row, h, r);
+			int left = x + inset;
+			int right = x + w - inset;
+			if (right <= left) {
+				continue;
+			}
+			sink.fill(left, y + row, left + 1, y + row + 1, color);
+			sink.fill(right - 1, y + row, right, y + row + 1, color);
+			// 首尾行补上水平的上下边
+			if (row == 0 || row == h - 1) {
+				sink.fill(left, y + row, right, y + row + 1, color);
+			}
+		}
 	}
 
 	private void border(GuiSink sink, int x, int y, int w, int h, int color) {

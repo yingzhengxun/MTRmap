@@ -62,6 +62,10 @@
 			route_pick_start: '请选择起点',
 			route_pick_end: '请选择终点',
 			route_hint_both: '起点：{start}　终点：{end}',
+			route_from_label: '起点',
+			route_to_label: '终点',
+			route_from_placeholder: '起点站名',
+			route_to_placeholder: '终点站名',
 			route_search: '立即查询',
 			route_clear: '清除',
 			route_tab_shortest: '最短',
@@ -193,6 +197,10 @@
 			route_pick_start: 'Select the start station',
 			route_pick_end: 'Select the end station',
 			route_hint_both: 'From: {start}  To: {end}',
+			route_from_label: 'From',
+			route_to_label: 'To',
+			route_from_placeholder: 'Start station',
+			route_to_placeholder: 'End station',
 			route_search: 'Search',
 			route_clear: 'Clear',
 			route_tab_shortest: 'Shortest',
@@ -324,6 +332,12 @@
 	let myLocation = null;     // {x, z}：我在地图上的实际位置
 	let startWalkInfo = null;  // {dist, dirKey}：从我的位置步行到起点站的指引
 	let routeFromMyLocation = false; // 起点是否由「我的位置」设定
+	// 起点 / 终点输入框的候选列表状态：matches 为当前候选站，active 为键盘选中的下标，
+	// lastQuery 用于避免同一个关键词重复建表与重建 DOM，timer 是输入防抖
+	const routeFieldState = {
+		from: { matches: [], active: -1, lastQuery: null, timer: 0, focused: false },
+		to: { matches: [], active: -1, lastQuery: null, timer: 0, focused: false }
+	};
 	let lastMyPos = null;      // 上一次刷新到的坐标，用来判断有没有走动
 	let navStartedAt = 0;      // 当前导航的起始时间（同一条路线保持不变）
 	let lastNavRev = '';       // 最近一次下发的导航 rev，用来判断路线有没有换
@@ -337,6 +351,7 @@
 	let detailLang = 'zh';      // 侧边栏站名用中文还是英文（没有译名时回退本名）
 	let searchMatches = [];     // 当前候选词
 	let searchActiveIndex = -1; // 键盘上下键选中的候选词
+	let searchInputTimer = 0;   // 搜索输入防抖
 	let lineListSignature = ''; // 线路一览的签名，用来判断要不要重绘
 
 	// ===== i18n 工具 =====
@@ -387,6 +402,13 @@
 	const routeSearchBtn = document.getElementById('routeSearchBtn');
 	const routeClearBtn = document.getElementById('routeClearBtn');
 	const routeMyLocationBtn = document.getElementById('routeMyLocationBtn');
+	// 路径面板的起点 / 终点输入框与候选列表
+	const routeFromLabel = document.getElementById('routeFromLabel');
+	const routeToLabel = document.getElementById('routeToLabel');
+	const routeFromInput = document.getElementById('routeFromInput');
+	const routeToInput = document.getElementById('routeToInput');
+	const routeFromResults = document.getElementById('routeFromResults');
+	const routeToResults = document.getElementById('routeToResults');
 	// 用户卡片 / 行程记录 / 票根
 	const userCard = document.getElementById('userCard');
 	const userCardMain = document.getElementById('userCardMain');
@@ -1011,7 +1033,9 @@
 		const vertical = h > w;
 		// 短边要盖住另一轴的站台分布，同时不小于普通车站直径
 		const r = Math.max(minThick / 2, (vertical ? w : h) / 2);
-		const half = Math.max((vertical ? h : w) / 2 - r, r * 0.8);
+		// 与游戏内一致：胶囊长度不能超出包围盒，短边站台不够长时 half 直接取 0，
+		// 否则绘制出来的胶囊比可点击区域更大，看着「只有某个点能点中」
+		const half = Math.max((vertical ? h : w) / 2 - r, 0);
 		return { cx: cx, cy: cy, r: r, half: half, vertical: vertical };
 	}
 
@@ -1950,6 +1974,220 @@
 		bindRideToggles();
 	}
 
+	// ===== 路径面板：起点 / 终点输入框 =====
+	function routeFieldInput(field) {
+		return field === 'from' ? routeFromInput : routeToInput;
+	}
+
+	function routeFieldResults(field) {
+		return field === 'from' ? routeFromResults : routeToResults;
+	}
+
+	// 输入框里应显示的站名：该侧没选站时为空串
+	function routeStationValue(field) {
+		const id = field === 'from' ? routeStartId : routeEndId;
+		const st = id !== null ? stationMap[id] : null;
+		return st ? stationNameText(st) : '';
+	}
+
+	function hideRouteCandidates(field) {
+		const results = routeFieldResults(field);
+		if (results) results.style.display = 'none';
+	}
+
+	// 输入到一半失焦：还原成已选站名，避免留下一条无效文本
+	function restoreRouteFieldText(field) {
+		const state = routeFieldState[field];
+		if (state.focused) return;
+		routeFieldInput(field).value = routeStationValue(field);
+		state.matches = [];
+		state.active = -1;
+		state.lastQuery = null;
+		hideRouteCandidates(field);
+	}
+
+	// 清空两侧输入框与候选（清除按钮 / 关闭路径模式时用）
+	function resetRouteFields() {
+		['from', 'to'].forEach(field => {
+			const state = routeFieldState[field];
+			if (state.timer) {
+				clearTimeout(state.timer);
+				state.timer = 0;
+			}
+			state.matches = [];
+			state.active = -1;
+			state.lastQuery = null;
+			hideRouteCandidates(field);
+			const input = routeFieldInput(field);
+			input.value = '';
+			// 失焦会走 restoreRouteFieldText，此时调用方应已把 id 清空
+			if (document.activeElement === input) input.blur();
+		});
+	}
+
+	// 按站名（主名 / 译名，大小写不敏感、包含匹配）挑候选，最多 8 条
+	function routeFindStations(query) {
+		const q = String(query || '').trim().toLowerCase();
+		if (!q) return [];
+		const out = [];
+		const stations = mapData.stations || [];
+		for (let i = 0; i < stations.length && out.length < 8; i++) {
+			const st = stations[i];
+			const n = splitName(st.name);
+			if (n.main.toLowerCase().indexOf(q) === -1 &&
+				(!n.trans || n.trans.toLowerCase().indexOf(q) === -1)) continue;
+			out.push(st);
+		}
+		return out;
+	}
+
+	function renderRouteCandidates(field) {
+		const state = routeFieldState[field];
+		const results = routeFieldResults(field);
+		if (!results) return;
+		if (!state.matches.length) {
+			// 有输入却搜不到时给个提示，空输入则直接收起
+			if (String(state.lastQuery || '').trim()) {
+				results.innerHTML = '<div class="route-result-empty">' +
+					escapeHtml(t('search_no_result')) + '</div>';
+				results.style.display = 'block';
+			} else {
+				results.style.display = 'none';
+			}
+			return;
+		}
+		results.innerHTML = state.matches.map((st, i) => {
+			const sub = isInterchange(st) ? t('interchange') : '';
+			return '<div class="route-result' + (i === state.active ? ' active' : '') +
+				'" data-index="' + i + '">' +
+				'<span class="route-result-dot" style="background:' + intToRgba(st.color, 1) + '"></span>' +
+				'<span class="route-result-name">' + escapeHtml(stationNameText(st)) + '</span>' +
+				(sub ? '<span class="route-result-sub">' + escapeHtml(sub) + '</span>' : '') +
+			'</div>';
+		}).join('');
+		results.style.display = 'block';
+		results.querySelectorAll('.route-result').forEach(el => {
+			// mousedown 抢在输入框失焦之前选中，否则下拉先被收起
+			el.addEventListener('mousedown', e => {
+				e.preventDefault();
+				selectRouteStation(field, state.matches[Number(el.getAttribute('data-index'))]);
+			});
+		});
+	}
+
+	// 立即按当前输入刷新候选（防抖到期或键盘操作时调用）
+	function updateRouteCandidates(field) {
+		const input = routeFieldInput(field);
+		const state = routeFieldState[field];
+		const query = input.value;
+		// 关键词没变就不重建候选 DOM
+		if (state.lastQuery === query) return;
+		state.lastQuery = query;
+		state.matches = routeFindStations(query);
+		state.active = state.matches.length ? 0 : -1;
+		renderRouteCandidates(field);
+	}
+
+	// 输入防抖：连续打字时只按最后一次输入算候选
+	function scheduleRouteCandidates(field) {
+		const state = routeFieldState[field];
+		if (state.timer) clearTimeout(state.timer);
+		state.timer = window.setTimeout(() => {
+			state.timer = 0;
+			updateRouteCandidates(field);
+		}, 80);
+	}
+
+	function setRouteCandidateActive(field, index) {
+		const state = routeFieldState[field];
+		if (index < 0 || index >= state.matches.length) return;
+		state.active = index;
+		const items = routeFieldResults(field).querySelectorAll('.route-result');
+		items.forEach((el, i) => el.classList.toggle('active', i === index));
+		if (items[index]) items[index].scrollIntoView({ block: 'nearest' });
+	}
+
+	// 选中候选站：写回路线状态；两侧都齐了立刻查一次
+	function selectRouteStation(field, st) {
+		if (!st) return;
+		if (field === 'from') {
+			routeStartId = st.id;
+			routeFromMyLocation = false;   // 手动选站后不再用「我的位置」的步行指引
+		} else {
+			// 与游戏内一致：终点不能再选起点同一个站
+			if (routeStartId !== null && st.id === routeStartId) return;
+			routeEndId = st.id;
+		}
+		const input = routeFieldInput(field);
+		const state = routeFieldState[field];
+		state.matches = [];
+		state.active = -1;
+		state.lastQuery = null;
+		hideRouteCandidates(field);
+		input.value = stationNameText(st);
+		if (document.activeElement === input) input.blur();
+		routeResult = null;
+		activeRouteTab = 0;
+		legExpandState = {};
+		if (routeStartId !== null && routeEndId !== null) computeRoutes();
+		updateRoutePanel();
+		render();
+	}
+
+	function handleRouteFieldKey(field, e) {
+		const state = routeFieldState[field];
+		if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+			e.preventDefault();
+			// 防抖还没到期时先按当前文本算一次，保证方向键立刻可用
+			if (state.timer) {
+				clearTimeout(state.timer);
+				state.timer = 0;
+				updateRouteCandidates(field);
+			}
+			if (!state.matches.length) return;
+			setRouteCandidateActive(field, state.active + (e.key === 'ArrowDown' ? 1 : -1));
+		} else if (e.key === 'Enter') {
+			e.preventDefault();
+			if (state.timer) {
+				clearTimeout(state.timer);
+				state.timer = 0;
+				updateRouteCandidates(field);
+			}
+			const pick = state.matches[state.active >= 0 ? state.active : 0];
+			if (pick) selectRouteStation(field, pick);
+		} else if (e.key === 'Escape') {
+			e.preventDefault();
+			state.matches = [];
+			state.active = -1;
+			hideRouteCandidates(field);
+		}
+	}
+
+	// 绑定输入框事件（只绑定一次）
+	function bindRouteField(field) {
+		const input = routeFieldInput(field);
+		const state = routeFieldState[field];
+		if (!input) return;
+		input.addEventListener('focus', () => {
+			state.focused = true;
+			state.lastQuery = null;
+			// 聚焦时全选已有站名，直接打字即可覆盖（与游戏内输入框一致）
+			if (input.value) input.select();
+			if (input.value.trim()) updateRouteCandidates(field);
+		});
+		input.addEventListener('input', () => {
+			scheduleRouteCandidates(field);
+		});
+		input.addEventListener('keydown', e => handleRouteFieldKey(field, e));
+		input.addEventListener('blur', () => {
+			state.focused = false;
+			state.active = -1;
+			restoreRouteFieldText(field);
+		});
+	}
+	bindRouteField('from');
+	bindRouteField('to');
+
 	function updateRoutePanel() {
 		if (!routePanel) return;
 		routePanelTitle.textContent = t('route_panel_title');
@@ -1960,6 +2198,13 @@
 		routeMyLocationBtn.textContent = t('my_location');
 		routeMyLocationBtn.title = t('my_location_title');
 		routeBtn.title = t('route_btn_title');
+		routeFromLabel.textContent = t('route_from_label');
+		routeToLabel.textContent = t('route_to_label');
+		routeFromInput.placeholder = t('route_from_placeholder');
+		routeToInput.placeholder = t('route_to_placeholder');
+		// 未聚焦时把已选站名写回输入框；聚焦时不要打断用户输入
+		if (!routeFieldState.from.focused) routeFromInput.value = routeStationValue('from');
+		if (!routeFieldState.to.focused) routeToInput.value = routeStationValue('to');
 		if (!routeMode) return;
 		if (routeStartId === null) {
 			routeHintEl.textContent = t('route_pick_start');
@@ -2398,7 +2643,11 @@
 		document.body.classList.toggle('route-mode', on);
 		routeBtn.classList.toggle('active', on);
 		routePanel.style.display = on ? 'flex' : 'none';
-		if (!on) tooltipEl.style.display = 'none';
+		if (!on) {
+			tooltipEl.style.display = 'none';
+			// 关闭面板时收起候选并还原输入框文本
+			resetRouteFields();
+		}
 		updateRoutePanel();
 		render();
 	}
@@ -2512,31 +2761,39 @@
 		if (!st) return;
 		const p = worldToCanvas(st.x, st.z);
 		const base = routeMode ? Math.max(6, 8 * Math.sqrt(scale)) : Math.max(4, 6 * Math.sqrt(scale));
-		const r = base + 5;
+		// 换乘站：起点绿 / 终点红要覆盖整条胶囊，而不是只盖住站点的锚点位置
+		const capsule = isInterchange(st) ? interchangeCapsule(st, base * 2) : null;
+		const cx = capsule ? capsule.cx : p.x;
+		const cy = capsule ? capsule.cy : p.y;
 		ctx.beginPath();
-		ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+		if (capsule) stadiumPath(cx, cy, capsule.r + 5, capsule.half, capsule.vertical);
+		else ctx.arc(cx, cy, base + 5, 0, Math.PI * 2);
 		ctx.strokeStyle = color;
 		ctx.lineWidth = 3;
 		ctx.stroke();
 		ctx.globalAlpha = 0.35;
 		ctx.beginPath();
-		ctx.arc(p.x, p.y, base, 0, Math.PI * 2);
+		if (capsule) stadiumPath(cx, cy, capsule.r, capsule.half, capsule.vertical);
+		else ctx.arc(cx, cy, base, 0, Math.PI * 2);
 		ctx.fillStyle = color;
 		ctx.fill();
 		ctx.globalAlpha = 1;
-		// 文字标签
+		// 文字标签：贴在标记下缘
+		const bottom = capsule
+			? (capsule.vertical ? cy + capsule.half + capsule.r : cy + capsule.r)
+			: cy + base + 5;
 		ctx.font = canvasFont(12, 'bold');
 		const bw = ctx.measureText(label).width + 12;
 		const bh = 18;
-		const bx = p.x - bw / 2;
-		const by = p.y + r + 6;
+		const bx = cx - bw / 2;
+		const by = bottom + 6;
 		roundRect(ctx, bx, by, bw, bh, 4);
 		ctx.fillStyle = color;
 		ctx.fill();
 		ctx.fillStyle = '#ffffff';
 		ctx.textAlign = 'center';
 		ctx.textBaseline = 'middle';
-		ctx.fillText(label, p.x, by + bh / 2 + 1);
+		ctx.fillText(label, cx, by + bh / 2 + 1);
 	}
 
 	// ===== 路径查询：步行指引绘制 =====
@@ -2649,6 +2906,7 @@
 		startWalkInfo = null;
 		activeRouteTab = 0;
 		legExpandState = {};
+		resetRouteFields();
 		updateRoutePanel();
 		render();
 	});
@@ -2983,24 +3241,28 @@
 		ctx.restore();
 	}
 
-	/** 车站高亮：金色荧光双环 */
+	/** 车站高亮：金色荧光双环；换乘站沿整条胶囊描边 */
 	function highlightStation(st) {
 		const p = worldToCanvas(st.x, st.z);
 		const r = Math.max(6, 8 * Math.sqrt(scale));
+		// 换乘站的高亮要贴着胶囊走，否则看起来只有锚点位置被选中
+		const capsule = isInterchange(st) ? interchangeCapsule(st, r * 2) : null;
+		const cx = capsule ? capsule.cx : p.x;
+		const cy = capsule ? capsule.cy : p.y;
 		ctx.save();
 		// 荧光：给环描边加一层发光
 		ctx.shadowColor = 'rgba(255, 216, 80, 0.95)';
 		ctx.shadowBlur = Math.max(14, r * 2.2);
-		ctx.beginPath();
-		ctx.arc(p.x, p.y, r + 5, 0, Math.PI * 2);
-		ctx.strokeStyle = 'rgba(255, 208, 64, 0.45)';
-		ctx.lineWidth = 6;
-		ctx.stroke();
-		ctx.beginPath();
-		ctx.arc(p.x, p.y, r + 11, 0, Math.PI * 2);
-		ctx.strokeStyle = '#ffd040';
-		ctx.lineWidth = 2.5;
-		ctx.stroke();
+		const ring = (radius, style, width) => {
+			ctx.beginPath();
+			if (capsule) stadiumPath(cx, cy, radius, capsule.half, capsule.vertical);
+			else ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+			ctx.strokeStyle = style;
+			ctx.lineWidth = width;
+			ctx.stroke();
+		};
+		ring(r + 5, 'rgba(255, 208, 64, 0.45)', 6);
+		ring(r + 11, '#ffd040', 2.5);
 		ctx.restore();
 	}
 
@@ -3080,7 +3342,14 @@
 		}
 	}
 
-	searchInput.addEventListener('input', renderSearchResults);
+	// 输入防抖 80ms：连续打字时只重建一次候选 DOM
+	searchInput.addEventListener('input', () => {
+		if (searchInputTimer) clearTimeout(searchInputTimer);
+		searchInputTimer = window.setTimeout(() => {
+			searchInputTimer = 0;
+			renderSearchResults();
+		}, 80);
+	});
 	searchInput.addEventListener('focus', renderSearchResults);
 	searchType.addEventListener('change', () => {
 		updateSearchUiText();

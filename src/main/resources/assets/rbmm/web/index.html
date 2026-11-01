@@ -42,6 +42,20 @@
 				<div class="route-panel-title" id="routePanelTitle">路径查询</div>
 				<button class="route-close" id="routeCloseBtn" title="关闭">×</button>
 			</div>
+			<div class="route-field">
+				<div class="route-field-label" id="routeFromLabel">起点</div>
+				<div class="route-field-box">
+					<input class="route-input" id="routeFromInput" type="text" autocomplete="off" spellcheck="false" placeholder="起点站名">
+					<div class="route-results" id="routeFromResults" style="display:none"></div>
+				</div>
+			</div>
+			<div class="route-field">
+				<div class="route-field-label" id="routeToLabel">终点</div>
+				<div class="route-field-box">
+					<input class="route-input" id="routeToInput" type="text" autocomplete="off" spellcheck="false" placeholder="终点站名">
+					<div class="route-results" id="routeToResults" style="display:none"></div>
+				</div>
+			</div>
 			<div class="route-hint" id="routeHint">请选择起点</div>
 			<div class="route-actions">
 				<button class="route-action-primary" id="routeSearchBtn" disabled>立即查询</button>
