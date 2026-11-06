@@ -109,6 +109,19 @@ public final class MtrMapCommon {
      */
     private static volatile int serverMapPort = 0;
 
+    /**
+     * 服务端是否装有本模组：只要收到一次端口同步包（哪怕端口为 0）就视为有。
+     *
+     * <p>没有安装时，客户端自动降级为「只用游戏内地图」：线网数据直接读客户端自己的 MTR 缓存，
+     * 不再向服务端请求地图数据，也不提供网页地图、行程记录、导航同步这些服务端功能。
+     */
+    private static volatile boolean serverModPresent;
+
+    /** 服务端是否装有本模组（客户端判定游戏内地图数据来源用）。 */
+    public static boolean hasServerMod() {
+        return serverModPresent;
+    }
+
     /** 地图 HTTP 端口：服务端同步过就用它，否则退回本地配置（单人游戏时两者一致）。 */
     public static int getMapPort() {
         int synced = serverMapPort;
@@ -117,13 +130,15 @@ public final class MtrMapCommon {
 
     /** 客户端收到服务端同步过来的地图端口。 */
     public static void onMapPortReceived(int port) {
+        serverModPresent = true;
         serverMapPort = port > 0 ? port : 0;
         LOGGER.info("收到服务端同步的地图服务端口：{}", port);
     }
 
-    /** 断开连接：忘掉上一个服务器的端口，下次进服重新同步。 */
+    /** 断开连接：忘掉上一个服务器的端口与在线状态，下次进服重新同步。 */
     public static void clearMapPort() {
         serverMapPort = 0;
+        serverModPresent = false;
     }
 
     private MtrMapCommon() {

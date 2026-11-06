@@ -130,6 +130,10 @@ public final class NavController {
     }
 
     private static JsonObject fetchTask(String uuid) {
+        // 服务端没装本模组时没有 /api/nav，跳过轮询（否则每 2 秒白等一次超时）
+        if (!MtrMapCommon.hasServerMod()) {
+            return null;
+        }
         String body = MapChannel.request("/api/nav?uuid=" + uuid, null);
         if (body == null) {
             return null;
@@ -141,6 +145,39 @@ public final class NavController {
         JsonObject obj = root.getAsJsonObject();
         // 服务端没有任务时返回空对象 {}
         return obj.size() == 0 ? null : obj;
+    }
+
+    /**
+     * 服务端没装本模组时，游戏内地图直接把路线交给导航。
+     *
+     * <p>参数与 {@code /api/nav} 的请求体相同（{@code {uuid, task}}），
+     * 这样两条路径共用 {@link NavTask#parse}，不必维护第二套解析。
+     */
+    public static void applyLocalTask(JsonObject body) {
+        if (body == null || !body.has("task") || !body.get("task").isJsonObject()) {
+            return;
+        }
+        JsonObject obj = body.getAsJsonObject("task");
+        NavTask parsed = NavTask.parse(obj);
+        if (parsed == null) {
+            return;
+        }
+        String rev = obj.has("rev") ? obj.get("rev").getAsString() : null;
+        if (rev != null && rev.equals(taskRev) && task != null) {
+            // 同一条路线：只刷新展示信息，进度不动
+            task = parsed;
+            return;
+        }
+        taskRev = rev;
+        task = parsed;
+        stepIndex = 0;
+        finished = false;
+        stopped = false;
+        taskArrivedAt = System.currentTimeMillis();
+        stepChangedAt = taskArrivedAt;
+        collapsed = false;
+        narratedStep = -1;
+        narrateTask(parsed);
     }
 
     // ===== 每 tick =====

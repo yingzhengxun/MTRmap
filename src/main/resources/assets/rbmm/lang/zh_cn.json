@@ -1,6 +1,7 @@
 {
     "key.rbmm.map_button": "交通线路图",
     "key.rbmm.open_map": "打开地图窗口",
+    "key.rbmm.web_needs_server": "当前服务器未安装本模组，只能使用游戏内地图（F6）",
     "key.rbmm.map_title": "若初的更好的 MTR 地图",
     "key.rbmm.toggle_nav": "收起/展开导航",
     "key.rbmm.open_settings": "打开模组设置",

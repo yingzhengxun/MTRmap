@@ -38,6 +38,7 @@ import mtr.data.Route;
 import mtr.data.Siding;
 import mtr.data.Station;
 import mtr.data.Train;
+import mtr.data.TrainClient;
 import mtr.data.TrainServer;
 import mtr.path.PathData;
 import net.minecraft.world.phys.Vec3;
@@ -322,8 +323,28 @@ public final class MtrNetwork {
 		Impl.capture(server);
 	}
 
+	/**
+	 * 客户端自采集：服务端没有装本模组时，用玩家客户端里 MTR 已同步的线网缓存
+	 * 直接画游戏内地图（网页地图仍需服务端安装本模组）。
+	 *
+	 * <p>必须在客户端线程调用；采集出来的是快照，之后由轮询线程读取。
+	 */
+	public static void captureClient() {
+		Impl.captureClient();
+	}
+
 	public static void clear() {
 		Impl.clear();
+	}
+
+	/** 断开连接时丢弃客户端快照，避免把上一台服务器的线网留在内存里 */
+	public static void clearClient() {
+		Impl.clearClient();
+	}
+
+	/** 是否已经有客户端快照（服务端数据与客户端快照任一可用即可） */
+	public static boolean hasClientSnapshot() {
+		return Impl.hasClientSnapshot();
 	}
 
 	public static boolean isAvailable() {
@@ -376,6 +397,32 @@ public final class MtrNetwork {
 
 		// 服务端数据（实际类型是 Simulator，它继承 Data，这里按 Data 用）
 		private static volatile Data cached;
+		// 客户端快照：服务端没装本模组时，改用 MinecraftClientData 里的数据
+		private static volatile Data clientData;
+
+		// 客户端线程调用：把 MTR 客户端的单例数据当作快照来源
+		private static void captureClient() {
+			try {
+				clientData = org.mtr.client.MinecraftClientData.getInstance();
+			} catch (Throwable t) {
+				MtrMapCommon.LOGGER.debug("获取 MTR 客户端数据失败", t);
+				clientData = null;
+			}
+		}
+
+		private static void clearClient() {
+			clientData = null;
+		}
+
+		private static boolean hasClientSnapshot() {
+			return clientData != null;
+		}
+
+		// 有客户端快照时优先用它，否则用服务端数据
+		private static Data source() {
+			Data client = clientData;
+			return client != null ? client : cached;
+		}
 
 		private static void capture(MinecraftServer server) {
 			if (server == null) {
@@ -394,7 +441,7 @@ public final class MtrNetwork {
 		}
 
 		private static boolean isAvailable() {
-			return cached != null;
+			return cached != null || clientData != null;
 		}
 
 		// 从 MTR 入口类的私有静态字段 main 拿到 org.mtr.core.Main，
@@ -454,7 +501,7 @@ public final class MtrNetwork {
 		}
 
 		private static List<StationInfo> stations() {
-			Data data = cached;
+			Data data = source();
 			if (data == null) {
 				return List.of();
 			}
@@ -467,7 +514,7 @@ public final class MtrNetwork {
 		}
 
 		private static Map<Long, Long> platformToStation() {
-			Data data = cached;
+			Data data = source();
 			if (data == null) {
 				return Map.of();
 			}
@@ -489,7 +536,7 @@ public final class MtrNetwork {
 		}
 
 		private static List<PlatformInfo> platforms() {
-			Data data = cached;
+			Data data = source();
 			if (data == null) {
 				return List.of();
 			}
@@ -519,7 +566,7 @@ public final class MtrNetwork {
 		}
 
 		private static List<RouteInfo> routes() {
-			Data data = cached;
+			Data data = source();
 			if (data == null) {
 				return List.of();
 			}
@@ -541,7 +588,7 @@ public final class MtrNetwork {
 		}
 
 		private static List<DepotInfo> depots() {
-			Data data = cached;
+			Data data = source();
 			if (data == null) {
 				return List.of();
 			}
@@ -605,7 +652,7 @@ public final class MtrNetwork {
 		}
 
 		private static Map<BlockPos, Map<BlockPos, MtrRailGeometry>> rails() {
-			Data data = cached;
+			Data data = source();
 			if (data == null) {
 				return null;
 			}
@@ -645,11 +692,25 @@ public final class MtrNetwork {
 
 		// 4.x 的列车挂在线路用的股道（Siding）上，逐条股道遍历即可
 		private static List<TrainInfo> trains() {
-			Data data = cached;
+			Data data = source();
 			if (data == null) {
 				return List.of();
 			}
 			List<TrainInfo> out = new ArrayList<>();
+			// 客户端没有 Siding 里的列车集合，列车在 MinecraftClientData.vehicles 里
+			if (data instanceof org.mtr.client.MinecraftClientData client) {
+				for (org.mtr.data.VehicleExtension vehicle : new ArrayList<>(client.vehicles)) {
+					try {
+						TrainInfo info = describe(vehicle);
+						if (info != null) {
+							out.add(info);
+						}
+					} catch (Throwable t) {
+						MtrMapCommon.LOGGER.debug("处理列车数据失败", t);
+					}
+				}
+				return out;
+			}
 			for (Siding siding : new ArrayList<>(data.sidings)) {
 				siding.iterateVehicles(vehicle -> {
 					try {
@@ -710,6 +771,79 @@ public final class MtrNetwork {
 
 		private static volatile RailwayData cached;
 
+		// ===== 客户端快照（服务端没装本模组时使用）=====
+		private static volatile List<Station> clientStations;
+		private static volatile List<Platform> clientPlatforms;
+		private static volatile List<Route> clientRoutes;
+		private static volatile List<Depot> clientDepots;
+		private static volatile Map<BlockPos, Map<BlockPos, Rail>> clientRails;
+		private static volatile List<TrainClient> clientTrains;
+
+		/** 客户端线程调用：把 MTR 客户端缓存复制成快照 */
+		private static void captureClient() {
+			try {
+				clientStations = new ArrayList<>(mtr.client.ClientData.STATIONS);
+				clientPlatforms = new ArrayList<>(mtr.client.ClientData.PLATFORMS);
+				clientRoutes = new ArrayList<>(mtr.client.ClientData.ROUTES);
+				clientDepots = new ArrayList<>(mtr.client.ClientData.DEPOTS);
+				clientRails = mtr.client.ClientData.RAILS;
+				clientTrains = new ArrayList<>(mtr.client.ClientData.TRAINS);
+			} catch (Throwable t) {
+				MtrMapCommon.LOGGER.debug("获取 MTR 客户端数据失败", t);
+				clearClient();
+			}
+		}
+
+		private static void clearClient() {
+			clientStations = null;
+			clientPlatforms = null;
+			clientRoutes = null;
+			clientDepots = null;
+			clientRails = null;
+			clientTrains = null;
+		}
+
+		private static boolean hasClientSnapshot() {
+			return clientStations != null;
+		}
+
+		// 下面几个 source 方法把「有客户端快照就用客户端」的取值统一起来
+		private static List<Station> sourceStations() {
+			List<Station> client = clientStations;
+			if (client != null) {
+				return client;
+			}
+			RailwayData data = cached;
+			return data == null ? null : new ArrayList<>(data.stations);
+		}
+
+		private static List<Platform> sourcePlatforms() {
+			List<Platform> client = clientPlatforms;
+			if (client != null) {
+				return client;
+			}
+			RailwayData data = cached;
+			return data == null ? null : new ArrayList<>(data.platforms);
+		}
+
+		private static List<Route> sourceRoutes() {
+			List<Route> client = clientRoutes;
+			if (client != null) {
+				return client;
+			}
+			RailwayData data = cached;
+			return data == null ? null : new ArrayList<>(data.routes);
+		}
+
+		private static List<Depot> sourceDepots() {
+			List<Depot> client = clientDepots;
+			if (client != null) {
+				return client;
+			}
+			RailwayData data = cached;
+			return data == null ? null : new ArrayList<>(data.depots);
+		}
+
 		private static void capture(MinecraftServer server) {
 			if (server == null) {
 				return;
@@ -728,32 +862,32 @@ public final class MtrNetwork {
 		}
 
 		private static boolean isAvailable() {
-			return cached != null;
+			return cached != null || clientStations != null;
 		}
 
 		/** 站台两个端点所在的方块集合（MTR 内部字段，反射读，字段不存在时退化成只用中点判断） */
 		private static final Field platformPositionsField = findField(mtr.data.SavedRailBase.class, "positions");
 
 		private static List<StationInfo> stations() {
-			RailwayData data = cached;
-			if (data == null) {
+			List<Station> stations = sourceStations();
+			if (stations == null) {
 				return Collections.emptyList();
 			}
 			List<StationInfo> out = new ArrayList<>();
-			for (Station station : new ArrayList<>(data.stations)) {
+			for (Station station : stations) {
 				out.add(new StationInfo(station.id, station.name, station.color, station.getCenter()));
 			}
 			return out;
 		}
 
 		private static Map<Long, Long> platformToStation() {
-			RailwayData data = cached;
-			if (data == null) {
+			List<Station> stations = sourceStations();
+			List<Platform> platforms = sourcePlatforms();
+			if (stations == null || platforms == null) {
 				return Collections.emptyMap();
 			}
-			List<Station> stations = new ArrayList<>(data.stations);
 			Map<Long, Long> out = new HashMap<>();
-			for (Platform platform : new ArrayList<>(data.platforms)) {
+			for (Platform platform : platforms) {
 				BlockPos mid = platform.getMidPos();
 				if (mid == null) {
 					continue;
@@ -769,12 +903,12 @@ public final class MtrNetwork {
 		}
 
 		private static List<PlatformInfo> platforms() {
-			RailwayData data = cached;
-			if (data == null) {
+			List<Platform> platforms = sourcePlatforms();
+			if (platforms == null) {
 				return Collections.emptyList();
 			}
 			List<PlatformInfo> out = new ArrayList<>();
-			for (Platform platform : new ArrayList<>(data.platforms)) {
+			for (Platform platform : platforms) {
 				out.add(new PlatformInfo(platform.id, platform.getMidPos(), corners(platform)));
 			}
 			return out;
@@ -794,12 +928,12 @@ public final class MtrNetwork {
 		}
 
 		private static List<RouteInfo> routes() {
-			RailwayData data = cached;
-			if (data == null) {
+			List<Route> routes = sourceRoutes();
+			if (routes == null) {
 				return Collections.emptyList();
 			}
 			List<RouteInfo> out = new ArrayList<>();
-			for (Route route : new ArrayList<>(data.routes)) {
+			for (Route route : routes) {
 				List<Long> platformIds = new ArrayList<>();
 				if (route.platformIds != null) {
 					for (Route.RoutePlatform routePlatform : route.platformIds) {
@@ -812,12 +946,12 @@ public final class MtrNetwork {
 		}
 
 		private static List<DepotInfo> depots() {
-			RailwayData data = cached;
-			if (data == null) {
+			List<Depot> depots = sourceDepots();
+			if (depots == null) {
 				return Collections.emptyList();
 			}
 			List<DepotInfo> out = new ArrayList<>();
-			for (Depot depot : new ArrayList<>(data.depots)) {
+			for (Depot depot : depots) {
 				int minX;
 				int minZ;
 				int maxX;
@@ -877,6 +1011,18 @@ public final class MtrNetwork {
 		private static final Field railsField = findField(RailwayData.class, "rails");
 
 		private static Map<BlockPos, Map<BlockPos, MtrRailGeometry>> rails() {
+			Map<BlockPos, Map<BlockPos, Rail>> client = clientRails;
+			if (client != null) {
+				// 客户端缓存与服务器同一套结构，多试几次避开客户端同步轨道的瞬间
+				for (int attempt = 0; attempt < 3; attempt++) {
+					try {
+						return wrapRails(client);
+					} catch (Exception ignored) {
+						// 换个时机再试
+					}
+				}
+				return null;
+			}
 			RailwayData data = cached;
 			if (data == null) {
 				return null;
@@ -887,20 +1033,25 @@ public final class MtrNetwork {
 					if (railData == null) {
 						return null;
 					}
-					Map<BlockPos, Map<BlockPos, MtrRailGeometry>> out = new HashMap<>();
-					for (Map.Entry<BlockPos, Map<BlockPos, Rail>> entry : railData.entrySet()) {
-						Map<BlockPos, MtrRailGeometry> row = new HashMap<>();
-						for (Map.Entry<BlockPos, Rail> neighbor : entry.getValue().entrySet()) {
-							row.put(neighbor.getKey(), wrap(neighbor.getValue()));
-						}
-						out.put(entry.getKey(), row);
-					}
-					return out;
+					return wrapRails(railData);
 				} catch (Exception ignored) {
 					// 换个时机再试
 				}
 			}
 			return null;
+		}
+
+		private static Map<BlockPos, Map<BlockPos, MtrRailGeometry>> wrapRails(
+				Map<BlockPos, Map<BlockPos, Rail>> railData) {
+			Map<BlockPos, Map<BlockPos, MtrRailGeometry>> out = new HashMap<>();
+			for (Map.Entry<BlockPos, Map<BlockPos, Rail>> entry : railData.entrySet()) {
+				Map<BlockPos, MtrRailGeometry> row = new HashMap<>();
+				for (Map.Entry<BlockPos, Rail> neighbor : entry.getValue().entrySet()) {
+					row.put(neighbor.getKey(), wrap(neighbor.getValue()));
+				}
+				out.put(entry.getKey(), row);
+			}
+			return out;
 		}
 
 		@SuppressWarnings("unchecked")
@@ -933,6 +1084,21 @@ public final class MtrNetwork {
 		private static final Field trainServerRouteIdField = findField(TrainServer.class, "routeId");
 
 		private static List<TrainInfo> trains() {
+			List<TrainClient> clientTrainsSnapshot = clientTrains;
+			if (clientTrainsSnapshot != null) {
+				List<TrainInfo> out = new ArrayList<>();
+				for (TrainClient train : clientTrainsSnapshot) {
+					try {
+						TrainInfo info = describeClient(train);
+						if (info != null) {
+							out.add(info);
+						}
+					} catch (Exception e) {
+						MtrMapCommon.LOGGER.debug("处理列车数据失败: {}", train.trainId, e);
+					}
+				}
+				return out;
+			}
 			RailwayData data = cached;
 			if (data == null) {
 				return Collections.emptyList();
@@ -1015,6 +1181,41 @@ public final class MtrNetwork {
 					// MTR 3.x 速度单位是格/tick（1 格 = 1 米），换算 km/h：* 20 tick/s * 3.6
 					Math.round(train.getSpeed() * 20 * 3.6),
 					routeId, routeName, routeColor, destination, riding.size(), riding);
+		}
+
+		/** 客户端列车：线路/下一站直接由客户端列车对象提供，不必再走 Siding 反射 */
+		private static TrainInfo describeClient(TrainClient train) {
+			double[] pos = trainPosition(train);
+			if (pos == null) {
+				return null;
+			}
+			String routeName = "";
+			int routeColor = 0xFFCCCCCC;
+			Route route = train.getThisRoute();
+			if (route != null) {
+				routeName = route.name == null ? "" : route.name;
+				routeColor = route.color;
+			}
+			String destination = "";
+			Station next = train.getNextStation();
+			if (next != null && next.name != null) {
+				destination = next.name;
+			}
+
+			List<UUID> riding = new ArrayList<>();
+			try {
+				@SuppressWarnings("unchecked")
+				Set<UUID> ridingEntities = (Set<UUID>) trainRidingEntitiesField.get(train);
+				if (ridingEntities != null) {
+					riding.addAll(ridingEntities);
+				}
+			} catch (Exception ignored) {
+				// 乘客信息不可用时只影响人数与名单
+			}
+
+			return new TrainInfo(train.trainId == null ? "" : train.trainId, pos[0], pos[1],
+					train.getIsOnRoute(), train.trainCars, Math.round(train.getSpeed() * 20 * 3.6),
+					0, routeName, routeColor, destination, riding.size(), riding);
 		}
 
 		/**

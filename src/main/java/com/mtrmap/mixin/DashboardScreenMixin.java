@@ -2,6 +2,7 @@ package com.mtrmap.mixin;
 
 import com.mtrmap.MtrMapCommon;
 import net.minecraft.Util;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -53,6 +54,14 @@ public class DashboardScreenMixin {
 			return;
 		}
 		Button.OnPress onPress = button -> {
+			if (!webMapAvailable()) {
+				// 服务端没装本模组：网页地图无从提供，只能使用游戏内地图
+				Minecraft client = Minecraft.getInstance();
+				if (client.player != null) {
+					client.player.displayClientMessage(translatable("key.rbmm.web_needs_server"), true);
+				}
+				return;
+			}
 			try {
 				// 地址按「当前连接的服务器 + 服务端同步过来的端口」拼，专用服务端上不能写死 localhost
 				Util.getPlatform().openUri(new URI(com.mtrmap.client.MapEndpoint.pageUrl()));
@@ -85,6 +94,11 @@ public class DashboardScreenMixin {
 		return new net.minecraft.network.chat.TranslatableComponent(key);
 	}
 	*///?}
+
+	/** 网页地图只在服务端装了本模组时才有意义（单人游戏自带集成服务端，同样算有）。 */
+	private static boolean webMapAvailable() {
+		return MtrMapCommon.hasServerMod() || Minecraft.getInstance().hasSingleplayerServer();
+	}
 
 	/**
 	 * 判断某个 Screen 是否是 MTR 的铁路仪表板（或其子类）。

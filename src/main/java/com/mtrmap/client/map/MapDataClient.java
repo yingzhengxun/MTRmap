@@ -5,6 +5,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.mtrmap.MtrMapCommon;
 import com.mtrmap.client.MapChannel;
+import com.mtrmap.server.MtrNetwork;
+import net.minecraft.client.Minecraft;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -70,6 +72,8 @@ public final class MapDataClient {
 		lastError = null;
 		connectionLogged = false;
 		MapChannel.reset();
+		// 上一台服务器的客户端线网快照不能留到下一台服务器
+		MtrNetwork.clearClient();
 	}
 
 	/** 立即刷新一次（切换站点开关等场景不用等下一个周期） */
@@ -84,20 +88,31 @@ public final class MapDataClient {
 					refreshNow = false;
 					MapModel model = current;
 					String before = lastError;
-					String body = MapChannel.request("/api/data", null);
-					JsonObject data = asObject(body);
-					if (data != null) {
-						// 线网数据里没有玩家，玩家由 /api/players 一并补上
-						MapModel fresh = MapModel.fromData(data);
-						JsonArray players = asArray(MapChannel.request("/api/players", null));
-						current = players == null ? fresh : fresh.withPlayers(players);
-						lastError = null;
-					} else {
-						JsonArray players = asArray(MapChannel.request("/api/players", null));
-						if (players != null) {
-							current = model.withPlayers(players);
+					if (MtrMapCommon.hasServerMod()) {
+						String body = MapChannel.request("/api/data", null);
+						JsonObject data = asObject(body);
+						if (data != null) {
+							// 线网数据里没有玩家，玩家由 /api/players 一并补上
+							MapModel fresh = MapModel.fromData(data);
+							JsonArray players = asArray(MapChannel.request("/api/players", null));
+							current = players == null ? fresh : fresh.withPlayers(players);
+							lastError = null;
+						} else {
+							JsonArray players = asArray(MapChannel.request("/api/players", null));
+							if (players != null) {
+								current = model.withPlayers(players);
+							}
+							lastError = MapChannel.lastError() != null ? MapChannel.lastError() : "尚未收到服务端数据";
 						}
-						lastError = MapChannel.lastError() != null ? MapChannel.lastError() : "尚未收到服务端数据";
+					} else {
+						// 服务端没装本模组：判定用户只需要游戏内地图，改用客户端 MTR 缓存
+						MapModel fresh = clientSnapshot();
+						if (fresh != null) {
+							current = fresh;
+							lastError = null;
+						} else if (lastError == null) {
+							lastError = "服务端未安装本模组，正在读取客户端线路数据";
+						}
 					}
 					logStateChange(before);
 				}
@@ -129,6 +144,45 @@ public final class MapDataClient {
 		}
 	}
 
+	/**
+	 * 服务端没装本模组时的取数：在客户端线程刷新 MTR 缓存快照，再在轮询线程组装模型。
+	 * 最多等 500ms，客户端线程卡住时这一轮跳过，不拖住轮询。
+	 */
+	private static MapModel clientSnapshot() {
+		Minecraft client = Minecraft.getInstance();
+		if (client.level == null) {
+			return null;
+		}
+		java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+		client.execute(() -> {
+			try {
+				MapClientData.refresh();
+			} finally {
+				latch.countDown();
+			}
+		});
+		try {
+			if (!latch.await(500, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+				return null;
+			}
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return null;
+		}
+		JsonObject data = MapClientData.collect();
+		MapModel model = MapModel.fromData(data);
+		JsonArray players = asArray(data, "players");
+		if (players != null) {
+			model = model.withPlayers(players);
+		}
+		return model.stations.isEmpty() && model.routes.isEmpty() ? null : model;
+	}
+
+	private static JsonArray asArray(JsonObject obj, String key) {
+		JsonElement element = obj.get(key);
+		return element != null && element.isJsonArray() ? element.getAsJsonArray() : null;
+	}
+
 	private static String describe(Throwable t) {
 		String message = t.getMessage();
 		return message == null || message.isEmpty() ? t.getClass().getSimpleName() : t.getClass().getSimpleName() + ": " + message;
@@ -157,21 +211,27 @@ public final class MapDataClient {
 		}
 	}
 
-	/** 后台异步请求（下发导航 / 行程回传），失败静默 */
+	/** 后台异步请求（下发导航 / 行程回传），失败静默；服务端没装本模组时直接跳过 */
 	public static void postAsync(String path, JsonObject body) {
+		if (!MtrMapCommon.hasServerMod()) {
+			return;
+		}
 		String json = body.toString();
 		Thread thread = new Thread(() -> MapChannel.request(path, json), "MTRMap-MapPost");
 		thread.setDaemon(true);
 		thread.start();
 	}
 
-	/** 同步请求，返回是否成功 */
+	/** 同步请求，返回是否成功；服务端没装本模组时直接返回 false */
 	public static boolean postSync(String path, JsonObject body) {
-		return MapChannel.request(path, body.toString()) != null;
+		return MtrMapCommon.hasServerMod() && MapChannel.request(path, body.toString()) != null;
 	}
 
 	/** 带查询参数的 GET（如 /api/trips?uuid=） */
 	public static JsonElement getWithParam(String path, String name, String value) {
+		if (!MtrMapCommon.hasServerMod()) {
+			return null;
+		}
 		try {
 			String encoded = URLEncoder.encode(value == null ? "" : value, StandardCharsets.UTF_8.name());
 			return parse(MapChannel.request(path + "?" + name + "=" + encoded, null));

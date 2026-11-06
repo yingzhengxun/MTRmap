@@ -1,6 +1,7 @@
 {
     "key.rbmm.map_button": "Traffic Map",
     "key.rbmm.open_map": "Open Map Window",
+    "key.rbmm.web_needs_server": "This server doesn't have the mod installed; only the in-game map (F6) is available",
     "key.rbmm.map_title": "Ruochu's better MTR map",
     "key.rbmm.toggle_nav": "Collapse / Expand Navigation",
     "key.rbmm.open_settings": "Open Mod Settings",

@@ -44,6 +44,8 @@
 
 服务端（包括开服的那台机器）同样需要装 MTR，否则本模组不会加载。除 MTR 外没有其它前置。
 
+**不需要服务端也装本模组**：只装在客户端时，游戏内地图（F6）会直接读取客户端已同步的 MTR 线网数据，站名搜索、路径规划与游戏内导航照常可用；网页地图、行程记录等依赖服务端的功能不可用，点击仪表板上的「交通线路图」会提示服务端未安装。服务端装了本模组时，功能与之前完全一致（含网页地图）。
+
 ## 快速上手
 
 1. 进入一个存档 / 服务器（**本机**开服或单机，见下面「常见问题」）。
@@ -152,6 +154,8 @@ Each Minecraft version ships a single `universal` jar that works on both of its 
 4. Drop `rbmm-<version>-<MC version>-universal.jar` into your `mods/` folder.
 
 The server (including the machine you host on) needs MTR too, otherwise this mod will not load. There are no other prerequisites besides MTR.
+
+**The server does not need this mod installed.** If it is only installed on the client, the in-game map (F6) reads the MTR railway data the client already syncs: station search, route planning and in-game navigation all keep working. Server-dependent features (web map, trip log) are unavailable, and the "Traffic Map" button on the dashboard tells you the server doesn't have the mod. When the server does have it, everything works exactly as before, including the web map.
 
 ### Quick start
 

@@ -4,6 +4,8 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.mojang.blaze3d.platform.InputConstants;
+import com.mtrmap.MtrMapCommon;
+import com.mtrmap.client.nav.NavController;
 import com.mtrmap.client.render.GlassBackdrop;
 import com.mtrmap.client.render.GuiSink;
 import com.mtrmap.config.MtrMapConfig;
@@ -2100,7 +2102,12 @@ public class MapScreen extends Screen {
 		JsonObject body = new JsonObject();
 		body.addProperty("uuid", mc.player.getUUID().toString());
 		body.add("task", task);
-		MapDataClient.postAsync("/api/nav", body);
+		if (MtrMapCommon.hasServerMod()) {
+			MapDataClient.postAsync("/api/nav", body);
+		} else {
+			// 服务端没装本模组：没有 /api/nav，直接把路线交给本地导航
+			NavController.applyLocalTask(body);
+		}
 	}
 
 	private static JsonObject point(String name, double x, double z) {
