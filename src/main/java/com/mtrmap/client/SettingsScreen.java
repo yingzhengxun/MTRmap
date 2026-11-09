@@ -19,8 +19,6 @@ public class SettingsScreen extends Screen {
     private Button ttsButton;
     private Button depotButton;
     private Button styleButton;
-    private int radiusLabelY;
-    private int opacityLabelY;
 
     public SettingsScreen(Screen parent) {
         super(Component.translatable("key.rbmm.settings_title"));
@@ -53,37 +51,12 @@ public class SettingsScreen extends Screen {
             b.setMessage(styleLabel());
         }).bounds(cx - 110, y + 52, 220, 20).build());
 
-        radiusLabelY = y + 80;
-        addRenderableWidget(Button.builder(Component.literal("−"), b -> changeRadius(-2))
-                .bounds(cx - 110, y + 78, 30, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("+"), b -> changeRadius(2))
-                .bounds(cx + 80, y + 78, 30, 20).build());
-
-        opacityLabelY = y + 106;
-        addRenderableWidget(Button.builder(Component.literal("−"), b -> changeOpacity(-10))
-                .bounds(cx - 110, y + 104, 30, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("+"), b -> changeOpacity(10))
-                .bounds(cx + 80, y + 104, 30, 20).build());
-
         addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> onClose())
-                .bounds(cx - 110, y + 132, 220, 20).build());
-    }
-
-    private void changeRadius(int delta) {
-        MtrMapConfig.setGlassRadius(MtrMapConfig.getGlassRadius() + delta);
-        MtrMapConfig.save();
-    }
-
-    private void changeOpacity(int delta) {
-        MtrMapConfig.setGlassOpacity(MtrMapConfig.getGlassOpacity() + delta);
-        MtrMapConfig.save();
+                .bounds(cx - 110, y + 78, 220, 20).build());
     }
 
     private static String nextTheme(String current) {
-        if ("dark".equals(current)) {
-            return "light";
-        }
-        return "light".equals(current) ? "glass" : "dark";
+        return "dark".equals(current) ? "light" : "dark";
     }
 
     private static Component ttsLabel() {
@@ -97,17 +70,8 @@ public class SettingsScreen extends Screen {
     }
 
     private static Component styleLabel() {
-        String key;
-        switch (MtrMapConfig.getMapTheme()) {
-            case "light":
-                key = "key.rbmm.style_light";
-                break;
-            case "glass":
-                key = "key.rbmm.style_glass";
-                break;
-            default:
-                key = "key.rbmm.style_dark";
-        }
+        String key = "light".equals(MtrMapConfig.getMapTheme())
+                ? "key.rbmm.style_light" : "key.rbmm.style_dark";
         return Component.translatable(key);
     }
 
@@ -116,12 +80,6 @@ public class SettingsScreen extends Screen {
         graphics.fill(0, 0, width, height, 0xC0101018);
         super.render(graphics, mouseX, mouseY, partialTick);
         graphics.drawCenteredString(font, title, width / 2, height / 2 - 104, 0xFFFFFF);
-        graphics.drawCenteredString(font,
-                Component.translatable("key.rbmm.glass_radius_value", MtrMapConfig.getGlassRadius()),
-                width / 2, radiusLabelY, 0x9AA4B2);
-        graphics.drawCenteredString(font,
-                Component.translatable("key.rbmm.glass_opacity_value", MtrMapConfig.getGlassOpacity()),
-                width / 2, opacityLabelY, 0x9AA4B2);
         graphics.drawCenteredString(font, Component.translatable("key.rbmm.settings_hint"),
                 width / 2, height / 2 + 70, 0x9AA4B2);
     }

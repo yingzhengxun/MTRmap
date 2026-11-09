@@ -6,7 +6,6 @@ import com.google.gson.JsonObject;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mtrmap.MtrMapCommon;
 import com.mtrmap.client.nav.NavController;
-import com.mtrmap.client.render.GlassBackdrop;
 import com.mtrmap.client.render.GuiSink;
 import com.mtrmap.config.MtrMapConfig;
 import net.minecraft.client.Minecraft;
@@ -76,9 +75,6 @@ public class MapScreen extends Screen {
 	/** 站名宽度的缓存（按 station.name 缓存主名/译名宽度），换数据时清空 */
 	private final java.util.Map<String, int[]> nameWidthCache = new java.util.HashMap<>();
 	private MapModel cacheModel;
-	/** 本帧 / 上一帧是否真的画过毛玻璃卡片：只有画过才值得抓屏模糊 */
-	private boolean glassUsedLastFrame;
-	private boolean glassUsedThisFrame;
 
 	// ===== 详情 / 路径 =====
 	private MapModel.Station detailStation;
@@ -279,7 +275,6 @@ public class MapScreen extends Screen {
 			nameWidthCache.clear();
 			hoverPickValid = false;
 		}
-		glassUsedThisFrame = false;
 		if (!viewInitialized && model.loaded) {
 			// 首次打开时数据还在路上，视野适配要等数据到了再做，否则会把镜头定在原点
 			viewInitialized = true;
@@ -305,14 +300,6 @@ public class MapScreen extends Screen {
 			drawRouteSelection(sink, model);
 		}
 
-		// 毛玻璃：地图已经画进 framebuffer，先提交顶点，再抓一份背景做模糊。
-		// 只有上一帧真的画过玻璃卡片时才值得抓屏（抓屏 + CPU 模糊代价很高）；
-		// 第一帧没有模糊纹理时玻璃卡片自动退回半透明填充，看不出来。
-		if (isGlassStyle() && glassUsedLastFrame) {
-			sink.flush();
-			GlassBackdrop.capture(width, height);
-		}
-
 		drawLeftStack(sink, mouseX, mouseY);
 		drawToolbar(sink, mouseX, mouseY);
 		drawDetailPanel(sink);
@@ -326,7 +313,6 @@ public class MapScreen extends Screen {
 		drawEggOverlay(sink);
 		drawToast(sink);
 		drawConnectionHint(sink, model);
-		glassUsedLastFrame = glassUsedThisFrame;
 		// 不调用 super.render：原版 Screen.render 会画一遍背景/组件，把地图盖掉。
 		// 本窗口没有任何原版控件，绘制全部由上面的 GuiSink 完成。
 	}
@@ -892,19 +878,10 @@ public class MapScreen extends Screen {
 	private void drawToolbar(GuiSink sink, int mouseX, int mouseY) {
 		for (Btn button : toolbarButtons()) {
 			boolean hover = button.contains(mouseX, mouseY);
-			if (isGlassStyle() && !button.active) {
-				// 毛玻璃模式下工具栏也是玻璃块（背景同样透过玻璃模糊）
-				glassCard(sink, button.x, button.y, TOOL_W, TOOL_W);
-				if (hover) {
-					uiFill(sink, button.x + 1, button.y + 1, button.x + TOOL_W - 1, button.y + TOOL_W - 1,
-							0x22FFFFFF);
-				}
-			} else {
-				int bg = button.active ? 0xFF3B5180 : surfaceColor(hover ? 0xFF35405C : 0xE61E1E2E,
-						hover ? 0xFF35405C : 0xF2FFFFFF);
-				uiFill(sink, button.x, button.y, button.x + TOOL_W, button.y + TOOL_W, bg);
-				uiBorder(sink, button.x, button.y, TOOL_W, TOOL_W, themeColor(0xFF3A3A4A, 0xFFBBBBCC));
-			}
+			int bg = button.active ? 0xFF3B5180 : themeColor(hover ? 0xFF35405C : 0xE61E1E2E,
+					hover ? 0xFF35405C : 0xF2FFFFFF);
+			uiFill(sink, button.x, button.y, button.x + TOOL_W, button.y + TOOL_W, bg);
+			uiBorder(sink, button.x, button.y, TOOL_W, TOOL_W, themeColor(0xFF3A3A4A, 0xFFBBBBCC));
 			sink.text(font, button.label, button.x + TOOL_W / 2f, button.y + (TOOL_W - 8) / 2f, textColor(), false);
 			if (hover && hoverText == null) {
 				hoverText = button.tooltip;
@@ -2578,265 +2555,44 @@ public class MapScreen extends Screen {
 	// ===== 绘制小工具 =====
 
 	private void panel(GuiSink sink, int x, int y, int w, int h) {
-		if (isGlassStyle()) {
-			glassCard(sink, x, y, w, h);
-			return;
-		}
 		uiFill(sink, x, y, x + w, y + h, surfaceColor(0xE61E1E2E, 0xF2FFFFFF));
 		uiBorder(sink, x, y, w, h, themeColor(0xFF3A3A4A, 0xFFBBBBCC));
 	}
 
-	// ===== 毛玻璃卡片 =====
-
-	/**
-	 * 悬浮玻璃卡片：阴影 → 背景模糊 → 冷色渐变底色 → 顶部高光 → 流动光斑 → 1px 亮边与内折射边。
-	 *
-	 * <p>背景模糊来自 {@link GlassBackdrop}（从 framebuffer 抓取并 CPU 模糊），
-	 * 拿不到时退回半透明填充，保证任何驱动下都有可读的底色。
-	 */
-	private void glassCard(GuiSink sink, int x, int y, int w, int h) {
-		if (w <= 0 || h <= 0) {
-			return;
-		}
-		int r = Math.min(glassRadius(), Math.min(w, h) / 2);
-		glassUsedThisFrame = true;
-		// 悬浮阴影：越靠外越淡
-		uiFill(sink, x - 4, y - 3, x + w + 4, y + h + 5, 0x14000000);
-		uiFill(sink, x - 2, y - 2, x + w + 2, y + h + 3, 0x1E000000);
-		uiFill(sink, x - 1, y - 1, x + w + 1, y + h + 2, 0x33000000);
-
-		boolean blurred = GlassBackdrop.draw(sink, x, y, w, h, r);
-		if (!blurred) {
-			uiFill(sink, x, y, x + w, y + h, glassTint(0xFF121A2E));
-		}
-		// 玻璃底色：上淡下浓，冷蓝到淡紫，透明度跟着设置里的毛玻璃透明度走
-		int topAlpha = glassTintAlpha();
-		int bottomAlpha = Math.min(255, topAlpha + 24);
-		glassGradient(sink, x, y, w, h, r, topAlpha, 0x121A2E, bottomAlpha, 0x1C1436);
-		glassHighlight(sink, x, y, w, h, r);
-		glassSheen(sink, x, y, w, h, r);
-		// 外圈 1px 亮边（模拟玻璃厚度）+ 内侧一圈更淡的折射边。
-		// 两圈都用「逐行 cornerInset」描边，并与 GlassBackdrop 的模糊层共用同一半径算法；
-		// 内圈半径同步减 1，才不会出现「边框圆角比模糊层圆角更方 / 更圆」的错位。
-		uiBorderRound(sink, x, y, w, h, r, 0x70FFFFFF);
-		if (w > 4 && h > 4) {
-			uiBorderRound(sink, x + 1, y + 1, w - 2, h - 2, Math.max(0, r - 1), 0x24FFFFFF);
-		}
-	}
-
-	/** 玻璃底色透明度（百分比 → 56~171 的 alpha，保证文字始终可读） */
-	private int glassTintAlpha() {
-		return (int) Math.round(56 + MtrMapConfig.getGlassOpacity() * 1.15);
-	}
-
-	/** 给某个 RGB 套上毛玻璃底色透明度 */
-	private int glassTint(int rgb) {
-		return (glassTintAlpha() << 24) | (rgb & 0x00FFFFFF);
-	}
-
-	/** 按行插值的竖向渐变，同时按圆角逐行收缩（圆角处不会出现方块直角） */
-	private void glassGradient(GuiSink sink, int x, int y, int w, int h, int r,
-			int topAlpha, int topRgb, int bottomAlpha, int bottomRgb) {
-		int tr = (topRgb >> 16) & 0xFF;
-		int tg = (topRgb >> 8) & 0xFF;
-		int tb = topRgb & 0xFF;
-		int br = (bottomRgb >> 16) & 0xFF;
-		int bg = (bottomRgb >> 8) & 0xFF;
-		int bb = bottomRgb & 0xFF;
-		for (int row = 0; row < h; row++) {
-			double t = h <= 1 ? 0.0 : row / (double) (h - 1);
-			int inset = cornerInset(row, h, r);
-			if (w - inset * 2 < 1) {
-				continue;
-			}
-			int a = (int) Math.round(topAlpha + (bottomAlpha - topAlpha) * t);
-			int cr = (int) Math.round(tr + (br - tr) * t);
-			int cg = (int) Math.round(tg + (bg - tg) * t);
-			int cb = (int) Math.round(tb + (bb - tb) * t);
-			int color = (a << 24) | (cr << 16) | (cg << 8) | cb;
-			sink.fill(x + inset, y + row, x + w - inset, y + row + 1, color);
-		}
-	}
-
-	/** 顶部柔和高光：越往下越淡，模拟光从上方打在玻璃表面 */
-	private void glassHighlight(GuiSink sink, int x, int y, int w, int h, int r) {
-		int rows = Math.min(12, Math.max(2, h / 4));
-		for (int i = 0; i < rows; i++) {
-			int inset = cornerInset(i, h, r);
-			if (w - inset * 2 < 1) {
-				continue;
-			}
-			int alpha = (int) Math.round(36 * (1.0 - i / (double) rows));
-			if (alpha <= 0) {
-				continue;
-			}
-			sink.fill(x + inset, y + i, x + w - inset, y + i + 1, (alpha << 24) | 0xFFFFFF);
-		}
-	}
-
-	/** 缓慢流动的光斑（液态感）：两团低透明度高光在卡片里绕圈漂移 */
-	private void glassSheen(GuiSink sink, int x, int y, int w, int h, int r) {
-		if (h < 24 || w < 24) {
-			return;
-		}
-		double time = System.nanoTime() / 1_000_000_000.0;
-		int radius = Math.max(10, Math.min(w, h) / 4);
-		// 圆心保证不跑出卡片内部，避免圆角外的亮斑
-		int marginX = Math.min(w / 2 - 2, radius + 4);
-		int marginY = Math.min(h / 2 - 2, radius + 4);
-		if (marginX <= 0 || marginY <= 0) {
-			return;
-		}
-		int cx1 = x + w / 2 + (int) Math.round(Math.sin(time * 0.22) * (w / 2.0 - marginX));
-		int cy1 = y + h / 2 + (int) Math.round(Math.cos(time * 0.17) * (h / 2.0 - marginY));
-		fillCircle(sink, cx1 - radius, cy1 - radius, radius * 2, 0x12FFFFFF);
-		int cx2 = x + w / 2 + (int) Math.round(Math.sin(time * 0.13 + 2.1) * (w / 2.0 - marginX));
-		int cy2 = y + h / 2 + (int) Math.round(Math.cos(time * 0.11 + 1.4) * (h / 2.0 - marginY));
-		fillCircle(sink, cx2 - radius / 2, cy2 - radius / 2, radius, 0x0CBFD8FF);
-	}
-
-	/** 圆角矩形第 {@code row} 行的左右内缩量（与 GlassBackdrop 的采样一致） */
-	private int cornerInset(int row, int h, int r) {
-		if (r <= 0) {
-			return 0;
-		}
-		int distance = Math.min(row, h - 1 - row);
-		if (distance >= r) {
-			return 0;
-		}
-		double dy = r - distance - 0.5;
-		return r - (int) Math.round(Math.sqrt(Math.max(0, r * (double) r - dy * dy)));
-	}
-
-	// ===== 主题（浅色 / 深色 / 毛玻璃）=====
+	// ===== 主题（浅色 / 深色）=====
 
 	private boolean isLightStyle() {
 		return "light".equals(MtrMapConfig.getMapTheme());
 	}
 
-	private boolean isGlassStyle() {
-		return "glass".equals(MtrMapConfig.getMapTheme());
-	}
-
-	/** 同一控件在深色与浅色下的固定配色；毛玻璃沿用深色 */
+	/** 同一控件在深色与浅色下的固定配色 */
 	private int themeColor(int darkColor, int lightColor) {
 		return isLightStyle() ? lightColor : darkColor;
 	}
 
-	/** 填充色：毛玻璃时改成按配置的透明度半透明 */
 	private int surfaceColor(int darkColor, int lightColor) {
-		int base = themeColor(darkColor, lightColor);
-		if (!isGlassStyle()) {
-			return base;
-		}
-		int alpha = (int) Math.round(MtrMapConfig.getGlassOpacity() * 2.55);
-		return (base & 0x00FFFFFF) | (alpha << 24);
-	}
-
-	/** 圆角：网页端以像素配置，游戏内按 GUI 像素折半 */
-	private int glassRadius() {
-		return MtrMapConfig.getGlassRadius() / 2;
+		return themeColor(darkColor, lightColor);
 	}
 
 	private String themeName() {
-		switch (MtrMapConfig.getMapTheme()) {
-			case "light":
-				return s("浅色", "Light");
-			case "glass":
-				return s("毛玻璃", "Glass");
-			default:
-				return s("深色", "Dark");
-		}
+		return isLightStyle() ? s("浅色", "Light") : s("深色", "Dark");
 	}
 
 	private String themeIcon() {
-		switch (MtrMapConfig.getMapTheme()) {
-			case "light":
-				return "☀";
-			case "glass":
-				return "▣";
-			default:
-				return "☾";
-		}
+		return isLightStyle() ? "☀" : "☾";
 	}
 
 	private void cycleTheme() {
-		String current = MtrMapConfig.getMapTheme();
-		String next = "dark".equals(current) ? "light" : ("light".equals(current) ? "glass" : "dark");
-		MtrMapConfig.setMapTheme(next);
+		MtrMapConfig.setMapTheme(isLightStyle() ? "dark" : "light");
 		MtrMapConfig.save();
 	}
 
-	/** 带圆角的面填充（毛玻璃模式；其他模式就是普通矩形） */
 	private void uiFill(GuiSink sink, int x, int y, int x2, int y2, int color) {
-		int w = x2 - x;
-		int h = y2 - y;
-		int r = isGlassStyle() ? Math.min(glassRadius(), Math.min(w, h) / 2) : 0;
-		if (r <= 0) {
-			sink.fill(x, y, x2, y2, color);
-			return;
-		}
-		for (int row = 0; row < h; row++) {
-			int inset = cornerInset(row, h, r);
-			sink.fill(x + inset, y + row, x2 - inset, y + row + 1, color);
-		}
+		sink.fill(x, y, x2, y2, color);
 	}
 
-	/** 带圆角的边框（毛玻璃模式），圆角以外的 UI 边框也走这里 */
 	private void uiBorder(GuiSink sink, int x, int y, int w, int h, int color) {
-		if (isGlassStyle()) {
-			// 毛玻璃：所有控件边框统一成半透明亮边，模拟玻璃边缘的反光
-			uiBorderRaw(sink, x, y, w, h, glassBorderColor(color));
-			return;
-		}
-		uiBorderRaw(sink, x, y, w, h, color);
-	}
-
-	/** 毛玻璃下的边框色：把原色向白色提亮，并统一成 40% 透明 */
-	private int glassBorderColor(int color) {
-		int r = (color >> 16) & 0xFF;
-		int g = (color >> 8) & 0xFF;
-		int b = color & 0xFF;
-		r = (r + 255 * 2) / 3;
-		g = (g + 255 * 2) / 3;
-		b = (b + 255 * 2) / 3;
-		return (0x66 << 24) | (r << 16) | (g << 8) | b;
-	}
-
-	private void uiBorderRaw(GuiSink sink, int x, int y, int w, int h, int color) {
-		int r = isGlassStyle() ? Math.min(glassRadius(), Math.min(w, h) / 2) : 0;
-		uiBorderRound(sink, x, y, w, h, r, color);
-	}
-
-	/**
-	 * 逐行内缩的 1px 圆角描边。
-	 *
-	 * <p>圆角段以前用 strokeArc 画成 16 段折线，而填充 / 模糊层用的是逐行 cornerInset：
-	 * 折线宽度压在边界上、像素也对不齐，看起来就是「卡片边框与模糊层圆角没对上」。
-	 * 现在边框与填充共用同一个 cornerInset，圆角处完全重合。
-	 */
-	private void uiBorderRound(GuiSink sink, int x, int y, int w, int h, int r, int color) {
-		if (w <= 0 || h <= 0) {
-			return;
-		}
-		if (r <= 0) {
-			border(sink, x, y, w, h, color);
-			return;
-		}
-		for (int row = 0; row < h; row++) {
-			int inset = cornerInset(row, h, r);
-			int left = x + inset;
-			int right = x + w - inset;
-			if (right <= left) {
-				continue;
-			}
-			sink.fill(left, y + row, left + 1, y + row + 1, color);
-			sink.fill(right - 1, y + row, right, y + row + 1, color);
-			// 首尾行补上水平的上下边
-			if (row == 0 || row == h - 1) {
-				sink.fill(left, y + row, right, y + row + 1, color);
-			}
-		}
+		border(sink, x, y, w, h, color);
 	}
 
 	private void border(GuiSink sink, int x, int y, int w, int h, int color) {

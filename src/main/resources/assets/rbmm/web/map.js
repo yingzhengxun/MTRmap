@@ -701,6 +701,9 @@
 	}
 
 	function exportImage(format) {
+		// 只接受明确支持的格式：样式弹窗里的按钮也带 export-fmt-btn 类，
+		// 误触到导出时会拿到 data-format=null，之前就会生成一个后缀为 .undefined 的文件。
+		if (!format || !['png', 'jpeg', 'webp'].includes(format)) return;
 		const bounds = calculateMapBounds();
 		if (!bounds) return;
 		const quality = qualitySlider.value / 100;
@@ -782,7 +785,8 @@
 		qualityDisplay.textContent = qualitySlider.value + '%';
 	});
 
-	document.querySelectorAll('.export-fmt-btn').forEach(btn => {
+	// 只绑定导出弹窗里的格式按钮：样式弹窗的按钮也复用了 export-fmt-btn 样式类
+	document.querySelectorAll('#exportDialog .export-fmt-btn').forEach(btn => {
 		btn.addEventListener('click', () => {
 			const format = btn.getAttribute('data-format');
 			// JPEG/WebP 允许调质量, PNG 隐藏质量行

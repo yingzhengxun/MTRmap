@@ -48,34 +48,14 @@ public class MtrMapConfig {
 		data.ttsEnabled = value;
 	}
 
-	/** 地图样式：light / dark / glass（毛玻璃） */
+	/** 地图样式：light / dark */
 	public static String getMapTheme() {
-		String theme = data.mapTheme;
-		return "light".equals(theme) || "glass".equals(theme) ? theme : "dark";
+		return "light".equals(data.mapTheme) ? "light" : "dark";
 	}
 
 	public static void setMapTheme(String value) {
 		data.mapTheme = value;
 	}
-
-	/** 毛玻璃圆角（0–24），游戏内按 GUI 像素折半绘制 */
-	public static int getGlassRadius() {
-		return Math.max(0, Math.min(24, data.glassRadius));
-	}
-
-	public static void setGlassRadius(int value) {
-		data.glassRadius = Math.max(0, Math.min(24, value));
-	}
-
-	/** 毛玻璃透明度（百分比 20–100） */
-	public static int getGlassOpacity() {
-		return Math.max(20, Math.min(100, data.glassOpacity));
-	}
-
-	public static void setGlassOpacity(int value) {
-		data.glassOpacity = Math.max(20, Math.min(100, value));
-	}
-
 
 	/** HTTP 服务器端口（默认 1145），即配置文件里填的端口 */
 	public static int getPort() {
@@ -140,11 +120,7 @@ public class MtrMapConfig {
 		public int port = 1145;
 		/** 讲述人语音播报，默认开启 */
 		public boolean ttsEnabled = true;
-		/** 地图样式：light / dark / glass */
+		/** 地图样式：light / dark */
 		public String mapTheme = "dark";
-		/** 毛玻璃圆角（0–24） */
-		public int glassRadius = 12;
-		/** 毛玻璃透明度（百分比 20–100） */
-		public int glassOpacity = 60;
 	}
 }
