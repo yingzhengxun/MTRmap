@@ -1,0 +1,237 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>若初的MTR地图 3.0.10 更新内容汇总</title>
+<style>
+@font-face {
+  font-family: "Poppins";
+  src: url("assets/update-3.6.4/Poppins-ExtraBold.ttf") format("truetype");
+  font-weight: 800;
+  font-style: normal;
+}
+@font-face {
+  font-family: "Poppins";
+  src: url("assets/update-3.6.4/Poppins-Light.ttf") format("truetype");
+  font-weight: 300;
+  font-style: normal;
+}
+@font-face {
+  font-family: "Poppins";
+  src: url("assets/update-3.6.4/Poppins-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 1920px; height: 1080px; background: #ffffff; overflow: hidden; }
+.page {
+  position: relative;
+  width: 1920px;
+  height: 1080px;
+  background: #ffffff;
+  overflow: hidden;
+  font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+}
+
+/* 背景水印 RBMM */
+.watermark {
+  position: absolute;
+  left: 560px;
+  top: 330px;
+  font-family: "Poppins", sans-serif;
+  font-weight: 300;
+  font-size: 380px;
+  line-height: 1;
+  letter-spacing: 8px;
+  color: #e9e9e9;
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* 图标 */
+.icon {
+  position: absolute;
+  left: 229px;
+  top: 19px;
+  height: 174px;
+  width: auto;
+  display: block;
+}
+
+/* 标题 */
+.title {
+  position: absolute;
+  left: 602px;
+  top: 56px;
+  display: flex;
+  align-items: baseline;
+  white-space: nowrap;
+}
+.title .latin {
+  margin-left: 0;
+  font-family: "Poppins", sans-serif;
+  font-weight: 700;
+  font-size: 56px;
+  color: #141414;
+  letter-spacing: 0;
+}
+.title .cn {
+  font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  font-weight: 800;
+  font-size: 56px;
+  color: #367358;
+  letter-spacing: 0;
+}
+.title .gap { margin-left: 12px; }
+
+[contenteditable] { outline: none; }
+[contenteditable]:hover { outline: none; }
+
+/* 更新列表（随条目数量/文字长短自适应） */
+.updates {
+  position: absolute;
+  left: 56px;
+  top: 213px;
+  width: 1240px;
+  height: 360px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  list-style: none;
+}
+.updates li {
+  position: relative;
+  font-size: 38px;
+  font-weight: 400;
+  color: #1b1b1b;
+  line-height: 1.6;
+  padding-left: 42px;
+  letter-spacing: 2.5px;
+  font-feature-settings: "halt" 1;
+  overflow-wrap: break-word;
+}
+.updates li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 30px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #2a2a2a;
+}
+.updates li span { letter-spacing: 0; }
+
+/* 斜向绿色条带与文字 */
+.bands {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1920px;
+  height: 1080px;
+}
+/* 斜带文字（可编辑，三行，整块旋转保证平行等距） */
+.band-text {
+  position: absolute;
+  /* 加载器一行字更长，单独缩小字号，避免被画面右边缘裁掉 */
+  left: 1410px;
+  top: 850px;
+  transform-origin: 0 0;
+  transform: rotate(-45deg) scaleX(0.9);
+  font-family: "Poppins", sans-serif;
+  font-weight: 800;
+  font-size: 66px;
+  line-height: 88px;
+  letter-spacing: 2px;
+  color: rgba(255, 255, 255, 0.22);
+  white-space: nowrap;
+}
+.band-text .loader {
+  font-size: 44px;
+  line-height: 88px;
+}
+
+/* 反馈文字 */
+.feedback {
+  position: absolute;
+  left: 42px;
+  top: 951px;
+  font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  font-weight: 800;
+  font-size: 44px;
+  line-height: 1.3;
+  letter-spacing: -2px;
+  color: #469470;
+  white-space: nowrap;
+}
+.feedback-echo-wrap {
+  position: absolute;
+  left: 42px;
+  top: 1008px;
+  height: 42px;
+  overflow: hidden;
+}
+.feedback-echo {
+  font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  font-weight: 800;
+  font-size: 44px;
+  line-height: 1.3;
+  letter-spacing: -2px;
+  color: #469470;
+  opacity: 0.30;
+  filter: blur(0.8px);
+  transform: translateY(46px) scaleY(-0.8);
+  transform-origin: top left;
+  white-space: nowrap;
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="watermark">RBMM</div>
+
+  <img class="icon" src="assets/update-3.6.4/icon.png" alt="">
+
+  <div class="title" contenteditable="true" spellcheck="false">
+    <span class="cn">若初的</span>
+    <span class="latin">MTR</span>
+    <span class="cn">地图</span>
+    <span class="latin gap">3.0.10</span>
+    <span class="cn gap">更新内容汇总</span>
+  </div>
+
+  <ul class="updates">
+    <li contenteditable="true" spellcheck="false">重做游戏内路径查询，改为两步点选</li>
+    <li contenteditable="true" spellcheck="false">起点终点两行标上「起」「终」，蓝框为当前填写项</li>
+    <li contenteditable="true" spellcheck="false">起点终点都选好后自动规划，不必再点查询</li>
+    <li contenteditable="true" spellcheck="false">新增「交换」按钮，一键对调起点与终点</li>
+    <li contenteditable="true" spellcheck="false">「我的位置」直接把最近车站设为起点</li>
+  </ul>
+
+  <svg class="bands" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+    <!-- 四条 45° 平行色带 -->
+    <polygon points="1920,316 1920,480 1320,1080 1156,1080" fill="#4EA47F"/>
+    <polygon points="1920,480 1920,690 1530,1080 1320,1080" fill="#469470"/>
+    <polygon points="1920,690 1920,890 1730,1080 1530,1080" fill="#3E8464"/>
+    <polygon points="1920,890 1920,1080 1730,1080" fill="#367358"/>
+  </svg>
+
+  <!-- 斜带文字：第一行 version，第二行 loader，第三行日期 -->
+  <div class="band-text" spellcheck="false">
+    <div contenteditable="true">3.0.10</div>
+    <div class="loader" contenteditable="true">Fabric,Forge,NeoForge</div>
+    <div contenteditable="true">20261110</div>
+  </div>
+
+  <div class="feedback-echo-wrap"><div class="feedback-echo">如有问题欢迎您反馈!</div></div>
+  <div class="feedback" contenteditable="true" spellcheck="false">如有问题欢迎您反馈!</div>
+</div>
+<script>
+  const fb = document.querySelector('.feedback');
+  const echo = document.querySelector('.feedback-echo');
+  const syncEcho = () => { echo.textContent = fb.textContent; };
+  fb.addEventListener('input', syncEcho);
+  syncEcho();
+</script>
+</body>
+</html>

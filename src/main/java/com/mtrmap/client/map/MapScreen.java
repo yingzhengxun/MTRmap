@@ -100,12 +100,13 @@ public class MapScreen extends Screen {
 	/** 路径面板输入框聚焦：0 = 无，1 = 起点，2 = 终点 */
 	private int routeInputFocus;
 	/**
-	 * 下一次点地图车站要填的字段：1 = 起点，2 = 终点。
+	 * 当前「正在填」的字段：1 = 起点，2 = 终点。
 	 *
-	 * <p>不能只看 id 是否为空：查询完成后再点站，旧逻辑会静默把起点换掉、终点清空，
-	 * 表现出来就是「点哪个站都变成起点」。这里用显式的下一步状态推进。
+	 * <p>面板上两行输入框分别标着「起」「终」，被激活的那一行有蓝色边框；
+	 * 此时点地图车站就会填进这一行，填完起点后自动切到终点。
+	 * 两个都填好后保持激活终点，再点车站就是改终点；要改起点就点一下起点那一行。
 	 */
-	private int routePickField = 1;
+	private int routeActiveField = 1;
 	private String routeStartText = "";
 	private String routeEndText = "";
 	private int routeStartCursor;
@@ -985,10 +986,11 @@ public class MapScreen extends Screen {
 		if (routeMessage != null) {
 			lines.add(routeMessage);
 		}
-		// 还没出方案也没报错：告诉玩家下一次点地图是在选起点还是终点
+		// 提示下一次点地图会填起点还是终点（起点没定时一定是起点）
 		if (hasRouteHint()) {
-			lines.add(s(routePickField == 2 ? "请点地图上的车站选择终点" : "请点地图上的车站选择起点",
-					routePickField == 2 ? "Click a station as destination" : "Click a station as start"));
+			boolean toEnd = routeStartId >= 0 && routeActiveField == 2;
+			lines.add(s(toEnd ? "点地图车站选择终点" : "点地图车站选择起点",
+					toEnd ? "Click a station as destination" : "Click a station as start"));
 		}
 		RoutePlanner.Option option = routeOptions.isEmpty() ? null
 				: routeOptions.get(Math.min(activeRouteTab, routeOptions.size() - 1));
@@ -1000,28 +1002,24 @@ public class MapScreen extends Screen {
 		panel(sink, x, y, w, h);
 		sink.textLeft(font, s("路径查询", "Route planner"), x + 6, y + 4, textColor(), false);
 		sink.textLeft(font, "×", x + w - 11, y + 4, dimColor(), false);
-		// 两个可编辑输入框（点击进入编辑态，下方弹出候选站）
-		drawRouteField(sink, model, 1, s("起点站名", "From station"),
+		// 两个可编辑输入框（点击进入编辑态，下方弹出候选站）；被激活的那一行蓝边
+		drawRouteField(sink, model, 1, s("起", "A"), s("起点站名", "From station"),
 				routeStartText, routeStartCursor, routeStartId);
-		drawRouteField(sink, model, 2, s("终点站名", "To station"),
+		drawRouteField(sink, model, 2, s("终", "B"), s("终点站名", "To station"),
 				routeEndText, routeEndCursor, routeEndId);
 		// 候选列表画在面板底色之上，不会被面板本身盖住
 		drawRouteCandidates(sink);
 
-		// 按钮行：立即查询 / 清除 / 我的位置
+		// 按钮行：交换起终点 / 清除 / 我的位置
 		int by = routeButtonsY();
 		int bh = 13;
 		int bw = (w - 15) / 3;
-		String[] labels = {s("立即查询", "Search"), s("清除", "Clear"), s("📍我的位置", "📍My location")};
-		String[] ids = {"go", "clear", "my"};
+		String[] labels = {s("⇄ 交换", "⇄ Swap"), s("清除", "Clear"), s("📍我的位置", "📍My location")};
 		for (int i = 0; i < 3; i++) {
 			int bx = x + 6 + i * (bw + 3);
-			boolean enabled = !"go".equals(ids[i]) || (routeStartId >= 0 && routeEndId >= 0);
-			int bg = "go".equals(ids[i]) && routeStartId >= 0 && routeEndId >= 0
-					? 0xFF3B6FD4 : surfaceColor(0xFF2A2A3C, 0xFFE4E4EC);
-			uiFill(sink, bx, by, bx + bw, by + bh, bg);
+			uiFill(sink, bx, by, bx + bw, by + bh, surfaceColor(0xFF2A2A3C, 0xFFE4E4EC));
 			uiBorder(sink, bx, by, bw, bh, themeColor(0xFF3A3A4A, 0xFFBBBBCC));
-			sink.text(font, fit(labels[i], bw - 4), bx + bw / 2f, by + 3, enabled ? textColor() : dimColor(), false);
+			sink.text(font, fit(labels[i], bw - 4), bx + bw / 2f, by + 3, textColor(), false);
 		}
 		int cy = by + 17;
 		for (String line : lines) {
@@ -1141,6 +1139,7 @@ public class MapScreen extends Screen {
 	private void focusRouteField(int field) {
 		MapModel model = MapDataClient.model();
 		routeInputFocus = field;
+		routeActiveField = field;
 		MapModel.Station station = model.station(field == 1 ? routeStartId : routeEndId);
 		String text = station == null ? "" : stationLabel(station);
 		setRouteText(field, text, text.length());
@@ -1207,24 +1206,32 @@ public class MapScreen extends Screen {
 		}
 	}
 
-	private void drawRouteField(GuiSink sink, MapModel model, int field, String placeholder,
+	private void drawRouteField(GuiSink sink, MapModel model, int field, String tag, String placeholder,
 			String text, int cursor, long id) {
 		int x = panelX();
 		int y = routeFieldY(field);
 		int fx = x + 6;
 		int fw = PANEL_W - 12;
 		boolean focused = routeInputFocus == field;
+		boolean active = routeActiveField == field;
 		uiFill(sink, fx, y, fx + fw, y + ROUTE_FIELD_H, surfaceColor(0xFF242434, 0xFFF3F3FA));
-		uiBorder(sink, fx, y, fw, ROUTE_FIELD_H, focused ? 0xFF7EC8E3 : themeColor(0xFF3A3A4A, 0xFFBBBBCC));
+		// 激活（点地图会填这一行）用蓝色边框，仅聚焦用更亮的蓝；其余为普通边框
+		int borderColor = active ? 0xFF4F8FE0
+				: (focused ? 0xFF7EC8E3 : themeColor(0xFF3A3A4A, 0xFFBBBBCC));
+		uiBorder(sink, fx, y, fw, ROUTE_FIELD_H, borderColor);
+		// 左侧角色标记：起 / 终
+		uiFill(sink, fx + 1, y + 1, fx + 12, y + ROUTE_FIELD_H - 1,
+				active ? 0xFF3B6FD4 : surfaceColor(0xFF33334A, 0xFFDCE3EE));
+		sink.text(font, tag, fx + 7f, y + 3, active ? 0xFFFFFFFF : dimColor(), false);
 		String shown = focused ? text : stationLabel(model.station(id));
 		boolean empty = shown == null || shown.isEmpty();
 		if (empty) {
 			shown = placeholder;
 		}
-		sink.textLeft(font, fit(shown, fw - 6), fx + 3, y + 3,
+		sink.textLeft(font, fit(shown, fw - 20), fx + 15, y + 3,
 				empty ? dimColor() : textColor(), false);
 		if (focused) {
-			int caret = fx + 3 + font.width(text.substring(0, Math.min(cursor, text.length())));
+			int caret = fx + 15 + font.width(text.substring(0, Math.min(cursor, text.length())));
 			sink.fill(caret, y + 3, caret + 1, y + ROUTE_FIELD_H - 2, textColor());
 		}
 	}
@@ -1273,16 +1280,25 @@ public class MapScreen extends Screen {
 			routeStartId = station.id;
 			routeStartText = stationLabel(station);
 			routeStartCursor = routeStartText.length();
-			routePickField = 2;
+			// 起点填好就自动切到终点，继续点地图即可
+			routeActiveField = 2;
 		} else {
 			routeEndId = station.id;
 			routeEndText = stationLabel(station);
 			routeEndCursor = routeEndText.length();
-			routePickField = 1;
+			// 只有终点没有起点：接下来该选起点
+			if (routeStartId < 0) {
+				routeActiveField = 1;
+			}
 		}
 		routeFromMyLocation = false;
 		routeInputFocus = 0;
 		clearRouteHits();
+		computeIfReady();
+	}
+
+	/** 起点与终点都齐了就自动算方案（不再需要「立即查询」按钮） */
+	private void computeIfReady() {
 		if (routeStartId >= 0 && routeEndId >= 0) {
 			computeRoutes();
 		}
@@ -1297,12 +1313,29 @@ public class MapScreen extends Screen {
 		startWalk = null;
 		routeFromMyLocation = false;
 		routeInputFocus = 0;
-		routePickField = 1;
+		routeActiveField = 1;
 		routeStartText = "";
 		routeEndText = "";
 		routeStartCursor = 0;
 		routeEndCursor = 0;
 		clearRouteHits();
+	}
+
+	/** 交换起点与终点（只填了一边时等于把那一侧挪到另一边） */
+	private void swapRoute() {
+		long id = routeStartId;
+		routeStartId = routeEndId;
+		routeEndId = id;
+		String text = routeStartText;
+		routeStartText = routeEndText;
+		routeEndText = text;
+		routeStartCursor = routeStartText.length();
+		routeEndCursor = routeEndText.length();
+		routeFromMyLocation = false;
+		routeMessage = null;
+		routeInputFocus = 0;
+		clearRouteHits();
+		computeIfReady();
 	}
 
 	/** 路径输入框的按键处理；返回 true 表示已消费 */
@@ -1839,31 +1872,36 @@ public class MapScreen extends Screen {
 		// 在地图上点站：输入框退出编辑态，候选清空
 		routeInputFocus = 0;
 		clearRouteHits();
-		// 该填终点：只要已经有起点就直接设终点，不再看终点 id 的旧值
-		if (routePickField == 2 && routeStartId >= 0) {
-			if (station.id == routeStartId) {
+		// 起点还没定就一定是选起点（无论当前激活哪一行）
+		int field = routeStartId < 0 ? 1 : routeActiveField;
+		if (field == 1) {
+			if (routeEndId >= 0 && station.id == routeEndId) {
 				routeMessage = s("起点与终点相同", "Same station");
 				return;
 			}
-			routeEndId = station.id;
-			routeEndText = stationLabel(station);
-			routeEndCursor = routeEndText.length();
-			routePickField = 1;
-			computeRoutes();
+			routeStartId = station.id;
+			routeStartText = stationLabel(station);
+			routeStartCursor = routeStartText.length();
+			routeMessage = null;
+			// 填完起点自动进入选终点
+			routeActiveField = 2;
+			if (routeEndId < 0) {
+				routeOptions = new ArrayList<>();
+				startWalk = null;
+			}
+			routeFromMyLocation = false;
+			computeIfReady();
 			return;
 		}
-		// 该填起点（点第三站等于开一次新查询）
-		routeStartId = station.id;
-		routeEndId = -1;
-		routeStartText = stationLabel(station);
-		routeStartCursor = routeStartText.length();
-		routeEndText = "";
-		routeEndCursor = 0;
-		routeOptions = new ArrayList<>();
-		routeMessage = null;
-		startWalk = null;
+		if (station.id == routeStartId) {
+			routeMessage = s("起点与终点相同", "Same station");
+			return;
+		}
+		routeEndId = station.id;
+		routeEndText = stationLabel(station);
+		routeEndCursor = routeEndText.length();
 		routeFromMyLocation = false;
-		routePickField = 2;
+		computeIfReady();
 	}
 
 	private void updateSearchHits(MapModel model) {
@@ -2114,7 +2152,8 @@ public class MapScreen extends Screen {
 		routeStartText = stationLabel(nearest);
 		routeStartCursor = routeStartText.length();
 		routeInputFocus = 0;
-		routePickField = routeEndId >= 0 ? 1 : 2;
+		// 起点已就位：接下来点地图就是在选终点
+		routeActiveField = 2;
 		clearRouteHits();
 		if (routeEndId >= 0) {
 			computeRoutes();
@@ -2421,14 +2460,14 @@ public class MapScreen extends Screen {
 				return true;
 			}
 		}
-		// 按钮行：立即查询 / 清除 / 我的位置（清除会同时清掉输入框文字与候选）
+		// 按钮行：交换 / 清除 / 我的位置（清除会同时清掉输入框文字与候选）
 		int by = routeButtonsY();
 		if (mouseY >= by && mouseY <= by + 13) {
 			int bw = (w - 15) / 3;
 			int index = (int) ((mouseX - x - 6) / (bw + 3));
 			if (index >= 0 && index < 3) {
 				if (index == 0) {
-					computeRoutes();
+					swapRoute();
 				} else if (index == 1) {
 					resetRoute();
 				} else {
@@ -2476,7 +2515,7 @@ public class MapScreen extends Screen {
 
 	/** 是否要显示「下一次点地图选起点/终点」的提示行（与绘制、高度计算共用） */
 	private boolean hasRouteHint() {
-		return routeOptions.isEmpty() && routeMessage == null;
+		return routeMessage == null;
 	}
 
 	/** 路径面板高度（画与点击必须用同一个值）：标题 + 两个输入框 + 候选 + 按钮 + 提示 + 方案 */
@@ -2548,8 +2587,8 @@ public class MapScreen extends Screen {
 			resetRoute();
 			return;
 		}
-		// 重新打开面板时按现有选择接着走：没起点 → 选起点；有起点没终点 → 选终点
-		routePickField = routeStartId < 0 ? 1 : (routeEndId < 0 ? 2 : 1);
+		// 重新打开面板时按现有选择接着走：没起点 → 选起点；有起点 → 选终点
+		routeActiveField = routeStartId < 0 ? 1 : 2;
 	}
 
 	// ===== 绘制小工具 =====
